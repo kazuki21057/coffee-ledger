@@ -172,7 +172,22 @@
       </section>
 
       <!-- 履歴 -->
-      <section class="view" id="view-history" hidden></section>
+      <section class="view" id="view-history" hidden>
+        <details class="card filters" id="filters">
+          <summary>絞り込み <span class="hint inline" id="filter-summary"></span></summary>
+          <div class="filter-grid">
+            <label>種類<select id="f-type"></select></label>
+            <label>場所<select id="f-cat"></select></label>
+            <label id="f-place-wrap" hidden>店<select id="f-place"></select></label>
+            <label>開始日<input type="date" id="f-start" /></label>
+            <label>終了日<input type="date" id="f-end" /></label>
+          </div>
+          <button type="button" class="btn secondary small" id="f-clear">条件をクリア</button>
+        </details>
+        <p class="hint" id="history-count"></p>
+        <div id="history-list"></div>
+        <button type="button" class="btn secondary block" id="history-more" hidden>さらに表示</button>
+      </section>
 
       <!-- 設定 -->
       <section class="view" id="view-settings" hidden></section>

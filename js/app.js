@@ -16,6 +16,8 @@ import {
   summarize,
   periodComparison,
   compareSeries,
+  filterEntries,
+  groupByDate,
 } from './aggregate.js';
 import * as charts from './charts.js';
 
@@ -869,12 +871,201 @@ function setupDashboard() {
 
 renderers.dashboard = renderDashboard;
 
+// ---------------------------------------------------------------- 履歴
+
+const PAGE = 200;
+const hist = { typeId: '', placeCategoryId: '', placeId: '', start: '', end: '', limit: PAGE };
+
+function dayLabel(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const w = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  const rel = dateStr === today() ? '今日 ' : dateStr === addDays(today(), -1) ? '昨日 ' : '';
+  return `${rel}${y}/${m}/${d}(${w})`;
+}
+
+function optionList(items, selected, allLabel, extra = []) {
+  return [
+    h('option', { value: '' }, allLabel),
+    ...extra,
+    ...items.map((x) => h('option', { value: x.id, selected: x.id === selected }, x.archived ? `${x.name}(非表示)` : x.name)),
+  ];
+}
+
+function renderHistoryFilters() {
+  $('f-type').replaceChildren(...optionList(state.types, hist.typeId, 'すべての種類'));
+  $('f-type').value = hist.typeId;
+  $('f-cat').replaceChildren(...optionList(state.placeCategories, hist.placeCategoryId, 'すべての場所', [h('option', { value: '__none__' }, '未設定')]));
+  $('f-cat').value = hist.placeCategoryId;
+  const cat = catById(hist.placeCategoryId);
+  $('f-place-wrap').hidden = !cat?.hasStores;
+  if (cat?.hasStores) {
+    const stores = state.places.filter((p) => p.categoryId === cat.id);
+    $('f-place').replaceChildren(...optionList(stores, hist.placeId, 'すべての店', [h('option', { value: '__none__' }, '(店未指定)')]));
+    $('f-place').value = hist.placeId;
+  }
+  $('f-start').value = hist.start;
+  $('f-end').value = hist.end;
+  const parts = [];
+  if (hist.typeId) parts.push(typeName(hist.typeId));
+  if (hist.placeCategoryId === '__none__') parts.push('場所未設定');
+  else if (hist.placeCategoryId) {
+    const base = placeLabel(hist.placeCategoryId, hist.placeId === '__none__' ? null : hist.placeId);
+    parts.push(hist.placeId === '__none__' ? `${base}・(店未指定)` : base);
+  }
+  if (hist.start || hist.end) parts.push(`${hist.start || '…'}〜${hist.end || '…'}`);
+  $('filter-summary').textContent = parts.length ? `(${parts.join('・')})` : '';
+}
+
+function renderHistory() {
+  renderHistoryFilters();
+  const filtered = filterEntries(state.entries, {
+    typeId: hist.typeId || null,
+    placeCategoryId: hist.placeCategoryId || null,
+    placeId: hist.placeId || null,
+    start: hist.start || null,
+    end: hist.end || null,
+  });
+  const total = filtered.reduce((a, e) => a + e.amount, 0);
+  $('history-count').textContent = filtered.length ? `${filtered.length}件・合計 ${yen(total)}` : '';
+  const groups = groupByDate(filtered);
+  const list = $('history-list');
+  if (filtered.length === 0) {
+    list.replaceChildren(
+      h('div', { class: 'card empty-state' }, h('p', {}, state.entries.length ? '条件に合う記録はありません。' : 'まだ記録がありません。')),
+    );
+    $('history-more').hidden = true;
+    return;
+  }
+  let shown = 0;
+  const nodes = [];
+  for (const g of groups) {
+    if (shown >= hist.limit) break;
+    const items = g.entries.slice(0, hist.limit - shown);
+    shown += items.length;
+    nodes.push(
+      h(
+        'section',
+        { class: 'day' },
+        h('div', { class: 'day-head' }, h('span', {}, dayLabel(g.date)), h('strong', {}, yen(g.total))),
+        h('ul', { class: 'items' }, ...items.map(historyItem)),
+      ),
+    );
+  }
+  list.replaceChildren(...nodes);
+  $('history-more').hidden = shown >= filtered.length;
+}
+
+function historyItem(e) {
+  const main = h(
+    'button',
+    { type: 'button', class: 'item-main', 'aria-label': `${entrySummary(e)} を編集` },
+    h('span', { class: 'item-type' }, typeName(e.typeId)),
+    h('span', { class: 'item-amount' }, yen(e.amount)),
+    h('span', { class: 'item-sub' }, placeLabel(e.placeCategoryId, e.placeId), e.note ? `・${e.note}` : ''),
+  );
+  const li = h(
+    'li',
+    { class: 'item' },
+    main,
+    h('button', { type: 'button', class: 'item-del', 'aria-label': `${entrySummary(e)} を削除`, title: '削除', onclick: () => confirmDelete(e) }, '🗑'),
+  );
+  attachSwipe(li, main, () => editEntry(e, 'history'), () => confirmDelete(e));
+  return li;
+}
+
+/** 左スワイプで削除、タップで編集 */
+function attachSwipe(li, main, onTap, onSwipe) {
+  let startX = null;
+  let startY = 0;
+  let dx = 0;
+  let swiping = false;
+  li.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType === 'mouse' || ev.target.closest('.item-del')) return;
+    startX = ev.clientX;
+    startY = ev.clientY;
+    dx = 0;
+    swiping = false;
+  });
+  li.addEventListener('pointermove', (ev) => {
+    if (startX === null) return;
+    dx = ev.clientX - startX;
+    if (!swiping && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(ev.clientY - startY)) swiping = true;
+    if (swiping) li.style.transform = `translateX(${Math.min(0, dx)}px)`;
+  });
+  const end = () => {
+    if (startX === null) return;
+    li.style.transform = '';
+    const fired = swiping && dx < -90;
+    startX = null;
+    if (fired) onSwipe();
+  };
+  li.addEventListener('pointerup', end);
+  li.addEventListener('pointercancel', () => {
+    li.style.transform = '';
+    startX = null;
+    swiping = false;
+  });
+  main.addEventListener('click', (ev) => {
+    if (swiping) {
+      ev.preventDefault();
+      swiping = false;
+      return;
+    }
+    onTap();
+  });
+}
+
+async function confirmDelete(e) {
+  if (!window.confirm(`この記録を削除しますか?\n${e.date} ${entrySummary(e)}`)) return;
+  try {
+    await db.deleteEntry(e.id);
+    showToast('削除しました', {
+      label: '元に戻す',
+      run: async () => {
+        await db.put('entries', e);
+        showToast('元に戻しました', null, 2500);
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    showToast('削除に失敗しました');
+  }
+}
+
+function setupHistory() {
+  const bind = (id, key, extra) =>
+    $(id).addEventListener('change', () => {
+      hist[key] = $(id).value;
+      if (extra) extra();
+      hist.limit = PAGE;
+      renderHistory();
+    });
+  bind('f-type', 'typeId');
+  bind('f-cat', 'placeCategoryId', () => {
+    hist.placeId = '';
+  });
+  bind('f-place', 'placeId');
+  bind('f-start', 'start');
+  bind('f-end', 'end');
+  $('f-clear').addEventListener('click', () => {
+    Object.assign(hist, { typeId: '', placeCategoryId: '', placeId: '', start: '', end: '', limit: PAGE });
+    renderHistory();
+  });
+  $('history-more').addEventListener('click', () => {
+    hist.limit += PAGE;
+    renderHistory();
+  });
+}
+
+renderers.history = renderHistory;
+
 // ---------------------------------------------------------------- 起動
 
 async function start() {
   setupNavigation();
   setupRecord();
   setupDashboard();
+  setupHistory();
   db.onChange(queueRefresh);
   try {
     await refresh();
