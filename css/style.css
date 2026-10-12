@@ -522,3 +522,176 @@ details > summary {
     }
   }
 }
+
+/* ---- ダッシュボード ---- */
+.period-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.seg {
+  min-height: var(--tap);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.seg + .seg {
+  border-left: 1px solid var(--border);
+}
+
+.seg[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+.period-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.period-nav .icon-btn {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.period-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.link-btn.small {
+  min-height: 32px;
+  font-size: 0.85rem;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.up {
+  color: var(--danger);
+}
+
+.down {
+  color: var(--ok);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-head h2 {
+  margin: 0;
+}
+
+.chart-box {
+  position: relative;
+  height: 220px;
+  width: 100%;
+}
+
+.chart-box.donut {
+  height: 260px;
+}
+
+.chart-box.series {
+  height: 280px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.drill-links {
+  margin-top: 6px;
+}
+
+.drill-links:empty {
+  display: none;
+}
+
+.empty-state {
+  text-align: center;
+}
+
+details > summary::before {
+  content: '▸';
+  margin-right: 6px;
+  color: var(--text-muted);
+}
+
+details[open] > summary::before {
+  content: '▾';
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}

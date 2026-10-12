@@ -9,6 +9,7 @@
     <meta name="description" content="コーヒーに使った金額を記録し、期間ごとの支出を確認する個人用アプリ" />
     <title>コーヒー家計簿</title>
     <link rel="stylesheet" href="css/style.css" />
+    <script src="vendor/chart.umd.min.js" defer></script>
     <script type="module" src="js/app.js"></script>
   </head>
   <body>
@@ -101,7 +102,74 @@
       </section>
 
       <!-- ダッシュボード -->
-      <section class="view" id="view-dashboard" hidden></section>
+      <section class="view" id="view-dashboard" hidden>
+        <div class="card empty-state" id="dash-empty" hidden>
+          <p>まだ記録がありません。</p>
+          <button type="button" class="btn primary" id="dash-go-record">記録する</button>
+        </div>
+
+        <div id="dash-body">
+          <section class="card period-bar" aria-label="期間">
+            <div class="segmented" role="group" aria-label="集計の単位">
+              <button type="button" class="seg" data-gran="week" aria-pressed="false">週</button>
+              <button type="button" class="seg" data-gran="month" aria-pressed="true">月</button>
+              <button type="button" class="seg" data-gran="year" aria-pressed="false">年</button>
+            </div>
+            <div class="period-nav">
+              <button type="button" class="icon-btn" id="period-prev" aria-label="前の期間">‹</button>
+              <div class="period-label">
+                <strong id="period-label"></strong>
+                <button type="button" class="link-btn small" id="period-today" hidden>今日へ</button>
+              </div>
+              <button type="button" class="icon-btn" id="period-next" aria-label="次の期間">›</button>
+            </div>
+          </section>
+
+          <section class="summary" aria-label="サマリー">
+            <div class="stat card"><span class="stat-label">合計金額</span><span class="stat-value" id="sum-total"></span></div>
+            <div class="stat card"><span class="stat-label">杯数</span><span class="stat-value" id="sum-cups"></span></div>
+            <div class="stat card"><span class="stat-label">1杯あたり平均</span><span class="stat-value" id="sum-avg"></span><span class="stat-sub">豆購入を除く</span></div>
+            <div class="stat card"><span class="stat-label">前期間比</span><span class="stat-value" id="sum-diff"></span><span class="stat-sub" id="sum-rate"></span></div>
+          </section>
+
+          <section class="card">
+            <h2>種類別</h2>
+            <p class="empty" id="type-empty" hidden>この期間の記録はありません。</p>
+            <div id="type-breakdown">
+              <div class="chart-box donut"><canvas id="chart-type" role="img" aria-label="種類別の金額のドーナツグラフ"></canvas></div>
+              <table class="data-table">
+                <thead><tr><th scope="col">種類</th><th scope="col" class="num">金額</th><th scope="col" class="num">構成比</th><th scope="col" class="num">件数</th></tr></thead>
+                <tbody id="type-table"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <h2 id="place-title">場所別</h2>
+              <button type="button" class="link-btn" id="place-back" hidden>区分別に戻る</button>
+            </div>
+            <p class="hint" id="place-hint">店を持つ区分(› 印)のバーをタップすると店別の内訳を表示します。</p>
+            <p class="empty" id="place-empty" hidden>この期間の記録はありません。</p>
+            <div class="chart-box" id="place-box"><canvas id="chart-place" role="img" aria-label="場所別の金額の横棒グラフ"></canvas></div>
+            <div class="row drill-links" id="place-drill-links"></div>
+          </section>
+
+          <section class="card">
+            <h2 id="series-title">期間比較</h2>
+            <div class="chart-box series"><canvas id="chart-series" role="img" aria-label="期間ごとの合計金額の種類別積み上げ棒グラフ"></canvas></div>
+            <p class="hint">濃い色のバーが選択中の期間です。バーの上の数字は合計金額(円)。</p>
+            <details class="series-details">
+              <summary>数値を表で見る</summary>
+              <table class="data-table">
+                <thead><tr><th scope="col">期間</th><th scope="col" class="num">合計</th></tr></thead>
+                <tbody id="series-table"></tbody>
+              </table>
+            </details>
+          </section>
+          <p class="error" id="chart-error" hidden>グラフ部品を読み込めませんでした。数値は表で確認できます。</p>
+        </div>
+      </section>
 
       <!-- 履歴 -->
       <section class="view" id="view-history" hidden></section>

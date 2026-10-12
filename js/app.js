@@ -11,7 +11,13 @@ import {
   findPlaceByName,
   lastCreated,
   needsBackupReminder,
+  periodRange,
+  shiftPeriod,
+  summarize,
+  periodComparison,
+  compareSeries,
 } from './aggregate.js';
+import * as charts from './charts.js';
 
 // ---------------------------------------------------------------- 共通
 
@@ -647,11 +653,228 @@ function setupRecord() {
 
 renderers.record = renderRecord;
 
+// ---------------------------------------------------------------- ダッシュボード
+
+const SERIES_N = { week: 12, month: 12, year: 5 };
+const dash = { granularity: 'month', anchor: null, drillCategory: null };
+
+function weekStart() {
+  return Number(state.settings.weekStart ?? 1);
+}
+
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+function md(dateStr) {
+  const [, m, d] = dateStr.split('-').map(Number);
+  return `${m}/${d}`;
+}
+
+function periodLabel(g, range) {
+  const [y, m] = range.start.split('-').map(Number);
+  if (g === 'year') return `${y}年`;
+  if (g === 'month') return `${y}年${m}月`;
+  const ey = Number(range.end.slice(0, 4));
+  const w = (d) => WEEKDAYS[new Date(`${d}T00:00:00`).getDay()];
+  return `${y}/${md(range.start)}(${w(range.start)})〜${ey !== y ? `${ey}/` : ''}${md(range.end)}(${w(range.end)})`;
+}
+
+function seriesLabel(g, range, i, all) {
+  const [y, m] = range.start.split('-').map(Number);
+  if (g === 'year') return String(y);
+  if (g === 'month') return m === 1 || i === 0 ? [`${m}月`, String(y)] : `${m}月`;
+  const prev = all[i - 1];
+  return i === 0 || (prev && prev.start.slice(0, 4) !== range.start.slice(0, 4)) ? [md(range.start), String(y)] : md(range.start);
+}
+
+/** 種類の色は表示順で固定する(期間によって色が変わらないように) */
+function typeColor(typeId) {
+  return charts.colorAt(state.types.findIndex((t) => t.id === typeId));
+}
+
+function renderDashboard() {
+  const hasData = state.entries.length > 0;
+  $('dash-empty').hidden = hasData;
+  $('dash-body').hidden = !hasData;
+  if (!hasData) {
+    charts.destroyAll();
+    return;
+  }
+  const g = dash.granularity;
+  const ws = weekStart();
+  const anchor = dash.anchor || today();
+  const range = periodRange(g, anchor, ws);
+  const prevRange = periodRange(g, shiftPeriod(g, anchor, -1, ws), ws);
+  const cur = summarize(state.entries, state.types, range);
+  const prev = summarize(state.entries, state.types, prevRange);
+
+  for (const b of document.querySelectorAll('.seg')) b.setAttribute('aria-pressed', String(b.dataset.gran === g));
+  $('period-label').textContent = periodLabel(g, range);
+  const isCurrent = today() >= range.start && today() <= range.end;
+  $('period-today').hidden = isCurrent;
+  $('period-next').disabled = range.end >= today();
+
+  // サマリー
+  $('sum-total').textContent = yen(cur.total);
+  $('sum-cups').textContent = `${cur.cups}杯`;
+  $('sum-avg').textContent = cur.avgPerCup === null ? '−' : yen(cur.avgPerCup);
+  const cmp = periodComparison(cur.total, prev.total);
+  const diffEl = $('sum-diff');
+  const rateEl = $('sum-rate');
+  diffEl.classList.remove('up', 'down');
+  if (cmp.rate === null) {
+    diffEl.textContent = '前期間なし';
+    rateEl.textContent = '前期間の支出が0円のため';
+  } else {
+    diffEl.textContent = `${cmp.diff > 0 ? '+' : ''}${yen(cmp.diff)}`;
+    const pct = Math.abs(cmp.rate * 100).toFixed(1);
+    rateEl.textContent = `${cmp.rate > 0 ? '+' : cmp.rate < 0 ? '−' : ''}${pct}%(${cmp.diff > 0 ? '増加' : cmp.diff < 0 ? '減少' : '変化なし'})`;
+    if (cmp.diff > 0) diffEl.classList.add('up');
+    if (cmp.diff < 0) diffEl.classList.add('down');
+  }
+
+  const chartsOk = charts.isChartAvailable();
+  $('chart-error').hidden = chartsOk;
+
+  renderTypeBreakdown(cur, chartsOk);
+  renderPlaceBreakdown(cur, chartsOk);
+  renderSeries(g, anchor, ws, chartsOk);
+}
+
+function renderTypeBreakdown(cur, chartsOk) {
+  const empty = cur.count === 0;
+  $('type-empty').hidden = !empty;
+  $('type-breakdown').hidden = empty;
+  if (empty) return;
+  const items = cur.byType.map((t) => ({ label: typeName(t.typeId), value: t.amount, color: typeColor(t.typeId), count: t.count, ratio: t.ratio }));
+  $('type-table').replaceChildren(
+    ...items.map((i) =>
+      h(
+        'tr',
+        {},
+        h('td', {}, h('span', { class: 'swatch', style: `background:${i.color}`, 'aria-hidden': 'true' }), i.label),
+        h('td', { class: 'num' }, yen(i.value)),
+        h('td', { class: 'num' }, cur.total > 0 ? `${(i.ratio * 100).toFixed(1)}%` : '−'),
+        h('td', { class: 'num' }, `${i.count}件`),
+      ),
+    ),
+  );
+  const box = $('chart-type').parentElement;
+  // 合計 0 円(自宅の 0 円記録のみ等)はドーナツを描けないので表のみ
+  box.hidden = !chartsOk || cur.total === 0;
+  if (!box.hidden) charts.renderDonut($('chart-type'), items);
+}
+
+function renderPlaceBreakdown(cur, chartsOk) {
+  const drill = dash.drillCategory ? catById(dash.drillCategory) : null;
+  let items;
+  if (drill) {
+    $('place-title').textContent = `場所別:${drill.name}の店別`;
+    items = (cur.byPlace[drill.id] || []).map((p) => ({
+      label: p.placeId ? placeById(p.placeId)?.name ?? '(不明な店)' : '(店未指定)',
+      value: p.amount,
+    }));
+  } else {
+    $('place-title').textContent = '場所別';
+    items = cur.byPlaceCategory.map((c) => {
+      const cat = c.placeCategoryId ? catById(c.placeCategoryId) : null;
+      return {
+        label: c.placeCategoryId ? cat?.name ?? '(不明な区分)' : '未設定',
+        value: c.amount,
+        clickable: Boolean(cat?.hasStores),
+        catId: c.placeCategoryId,
+      };
+    });
+  }
+  $('place-back').hidden = !drill;
+  $('place-hint').hidden = Boolean(drill) || !items.some((i) => i.clickable);
+  const empty = items.length === 0;
+  $('place-empty').hidden = !empty;
+  $('place-box').hidden = empty || !chartsOk;
+  // キーボード・支援技術向けの店別リンク(グラフのタップと同じ動作)
+  $('place-drill-links').replaceChildren(
+    ...(drill || empty
+      ? []
+      : items
+          .filter((i) => i.clickable)
+          .map((i) => h('button', { type: 'button', class: 'link-btn small', onclick: () => drillInto(i.catId) }, `${i.label}の店別を見る`))),
+  );
+  if (!chartsOk) {
+    $('place-drill-links').append(
+      h('table', { class: 'data-table' }, h('tbody', {}, ...items.map((i) => h('tr', {}, h('td', {}, i.label), h('td', { class: 'num' }, yen(i.value)))))),
+    );
+    return;
+  }
+  if (!empty) {
+    charts.renderHorizontalBars($('chart-place'), items, (idx) => {
+      if (!drill && items[idx]?.clickable) drillInto(items[idx].catId);
+    });
+  }
+}
+
+function drillInto(catId) {
+  dash.drillCategory = catId;
+  renderDashboard();
+}
+
+function renderSeries(g, anchor, ws, chartsOk) {
+  const n = SERIES_N[g];
+  const unit = { week: '週', month: 'か月', year: '年' }[g];
+  $('series-title').textContent = `期間比較(直近${n}${unit})`;
+  // 選択中の期間が右端に来るよう、anchor を含む直近 n 期間を表示する
+  const periods = compareSeries(state.entries, state.types, g, anchor, n, ws);
+  $('series-table').replaceChildren(
+    ...[...periods].reverse().map((p) => h('tr', {}, h('td', {}, periodLabel(g, p)), h('td', { class: 'num' }, yen(p.total)))),
+  );
+  $('chart-series').parentElement.hidden = !chartsOk;
+  if (!chartsOk) return;
+  const used = state.types.filter((t) => periods.some((p) => p.byType[t.id]));
+  const series = used.map((t) => ({ label: t.name, data: periods.map((p) => p.byType[t.id] || 0), color: typeColor(t.id) }));
+  const labels = periods.map((p, i) => seriesLabel(g, p, i, periods));
+  charts.renderStacked(
+    $('chart-series'),
+    labels,
+    series,
+    periods.map((p) => p.total),
+    periods.length - 1,
+  );
+}
+
+function setupDashboard() {
+  for (const b of document.querySelectorAll('.seg')) {
+    b.addEventListener('click', () => {
+      dash.granularity = b.dataset.gran;
+      renderDashboard();
+    });
+  }
+  const move = (delta) => {
+    dash.anchor = shiftPeriod(dash.granularity, dash.anchor || today(), delta, weekStart());
+    renderDashboard();
+  };
+  $('period-prev').addEventListener('click', () => move(-1));
+  $('period-next').addEventListener('click', () => move(1));
+  $('period-today').addEventListener('click', () => {
+    dash.anchor = null;
+    renderDashboard();
+  });
+  $('place-back').addEventListener('click', () => {
+    dash.drillCategory = null;
+    renderDashboard();
+  });
+  $('dash-go-record').addEventListener('click', () => showView('record'));
+  // ライト/ダーク切替時にグラフの文字色を合わせる
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (state.view === 'dashboard') renderDashboard();
+  });
+}
+
+renderers.dashboard = renderDashboard;
+
 // ---------------------------------------------------------------- 起動
 
 async function start() {
   setupNavigation();
   setupRecord();
+  setupDashboard();
   db.onChange(queueRefresh);
   try {
     await refresh();
