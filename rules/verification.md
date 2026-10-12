@@ -25,6 +25,7 @@
 ## 既知の失敗しやすい検証経路
 - `node --test tests/` のディレクトリ指定は Node 22 で失敗する。必ず glob(`"tests/*.test.js"`)を使う(L1)。
 - Service Worker の更新・オフライン検証は、同一ブラウザコンテキストで `reload` を挟んで SW の制御下に入ってから `setOffline(true)` する。初回ロード直後はまだ制御下に無い。
+- SW の更新検証はローカルの no-cache 配信では再現しない問題がある。`Cache-Control: max-age=600`(GitHub Pages と同じ)で配信し、旧版→新版の差し替えを確認する(L4)。
 - ローカル配信はルートではなく `/coffee-ledger/` のようなサブパスで行う(GitHub Pages と同条件にしないと絶対パスの誤りを見逃す)。
 
 ## コーディング規約
@@ -43,6 +44,7 @@
 
 ### PWA / Service Worker
 - L2 初回インストール時の clients.claim でも controllerchange が発火する
+- L4 SWのcache.addAllはHTTPキャッシュ経由。Pagesのmax-age=600で旧版を固定する
 
 ### UI / DOM
 - L3 単一HTMLに全画面を置くとid重複で別画面の要素を掴む

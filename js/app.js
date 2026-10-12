@@ -1408,17 +1408,24 @@ function setupServiceWorker() {
       worker.postMessage('SKIP_WAITING');
     };
   };
+  // 既存の版が動いている状態で新しい版が入ったときだけ通知する(初回インストール時は出さない)
+  const watch = (worker) => {
+    if (!worker) return;
+    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+      showUpdate(worker);
+      return;
+    }
+    worker.addEventListener('statechange', () => {
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+    });
+  };
   navigator.serviceWorker
     .register('./sw.js')
     .then((reg) => {
-      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const worker = reg.installing;
-        worker?.addEventListener('statechange', () => {
-          // 既存の版が動いている状態で新しい版が入ったときだけ通知する(初回インストール時は出さない)
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
-        });
-      });
+      // 登録完了前に更新の取得が始まっていると updatefound を取り逃すため、既存の waiting/installing も見る
+      watch(reg.waiting);
+      watch(reg.installing);
+      reg.addEventListener('updatefound', () => watch(reg.installing));
       // 開いたままでも定期的に更新を確認する
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') reg.update().catch(() => {});

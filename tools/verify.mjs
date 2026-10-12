@@ -81,7 +81,10 @@ const appShell = shellMatch ? [...shellMatch[1].matchAll(/'([^']+)'/g)].map((m) 
     ),
   ];
   const notCached = assets.filter((a) => !appShell.includes(`./${a}`));
-  checks.precache = { ok: missing.length === 0 && notCached.length === 0, entries: appShell.length };
+  // プリキャッシュは HTTP キャッシュを経由しないこと(教訓 L4)
+  const bypassHttpCache = /cache:\s*'reload'/.test(read('sw.js'));
+  checks.precache = { ok: missing.length === 0 && notCached.length === 0 && bypassHttpCache, entries: appShell.length };
+  if (!bypassHttpCache) checks.precache.note = "sw.js のプリキャッシュに cache: 'reload' がありません(L4)";
   if (missing.length) checks.precache.missing_files = missing;
   if (notCached.length) checks.precache.not_in_app_shell = notCached;
 }

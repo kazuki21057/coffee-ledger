@@ -1,6 +1,6 @@
 // Service Worker: アプリシェルをプリキャッシュし、cache-first で配信する。
 // アセット(HTML/CSS/JS/vendor/icons)を変更したら必ず CACHE_VERSION を上げること。
-const CACHE_VERSION = 'coffee-v2';
+const CACHE_VERSION = 'coffee-v3';
 
 // すべて相対パス(GitHub Pages のサブパス配信に対応)
 const APP_SHELL = [
@@ -21,7 +21,11 @@ const APP_SHELL = [
 
 self.addEventListener('install', (event) => {
   // 新しい版は待機状態にして、画面の「再読み込み」で切り替える
-  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)));
+  // cache: 'reload' で HTTP キャッシュを経由せずに取得する(GitHub Pages は max-age=600 のため、
+  // 経由すると更新直後でも古いファイルをプリキャッシュしてしまう。教訓 L4)
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: 'reload' })))),
+  );
 });
 
 self.addEventListener('activate', (event) => {
