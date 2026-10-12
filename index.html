@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#6f4e37" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1714" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="コーヒーに使った金額を記録し、期間ごとの支出を確認する個人用アプリ" />
+    <title>コーヒー家計簿</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <script type="module" src="js/app.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <button type="button" class="icon-btn" id="back-btn" aria-label="戻る" hidden>←</button>
+      <h1 id="page-title">記録</h1>
+      <div class="menu-wrap">
+        <button type="button" class="icon-btn" id="menu-btn" aria-label="メニュー" aria-haspopup="true" aria-expanded="false">⋮</button>
+        <div class="menu" id="menu" role="menu" hidden>
+          <button type="button" role="menuitem" data-view="settings">設定</button>
+          <button type="button" role="menuitem" data-view="help">ヘルプ</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="banner" id="update-banner" hidden>
+      <span>更新があります</span>
+      <button type="button" class="btn small" id="update-reload">再読み込み</button>
+    </div>
+
+    <main id="main">
+      <!-- 記録 -->
+      <section class="view" id="view-record" aria-labelledby="page-title">
+        <div class="notice" id="backup-notice" hidden>
+          <span>最後のバックアップから30日以上たっています。</span>
+          <button type="button" class="link-btn" id="backup-notice-open">CSVを書き出す</button>
+        </div>
+
+        <section class="card" id="quick-section">
+          <h2>クイック入力</h2>
+          <p class="hint" id="quick-hint">ボタンを押すと今日の日付ですぐ保存します。長押しまたは ✎ で内容を修正できます。</p>
+          <div class="presets" id="presets"></div>
+          <button type="button" class="btn secondary block" id="same-as-last" disabled>前回と同じ</button>
+        </section>
+
+        <form class="card" id="entry-form" novalidate>
+          <div class="edit-banner" id="edit-banner" hidden>
+            <span>記録を編集中</span>
+            <button type="button" class="link-btn" id="edit-cancel">編集をやめる</button>
+          </div>
+
+          <fieldset>
+            <legend>種類 <span class="req">必須</span></legend>
+            <div class="chips" id="type-chips"></div>
+          </fieldset>
+
+          <fieldset>
+            <legend>場所</legend>
+            <div class="chips" id="cat-chips"></div>
+            <div class="store-area" id="store-area" hidden>
+              <label class="visually-hidden" for="store-select">店</label>
+              <select id="store-select"></select>
+              <div class="store-add" id="store-add" hidden>
+                <div class="row">
+                  <label class="visually-hidden" for="store-new-name">新しい店の名前</label>
+                  <input type="text" id="store-new-name" placeholder="店名を入力" maxlength="40" autocomplete="off" enterkeyhint="done" />
+                  <button type="button" class="btn small" id="store-add-btn">追加</button>
+                  <button type="button" class="btn small secondary" id="store-cancel-btn">キャンセル</button>
+                </div>
+                <p class="error" id="store-error" role="alert" hidden></p>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <label for="amount">金額(円) <span class="req">必須</span></label>
+            <div class="amount-wrap">
+              <span aria-hidden="true">¥</span>
+              <input type="text" id="amount" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="0" maxlength="7" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="date">日付</label>
+            <div class="row">
+              <button type="button" class="chip" id="date-today" aria-pressed="true">今日</button>
+              <button type="button" class="chip" id="date-yesterday" aria-pressed="false">昨日</button>
+              <input type="date" id="date" required />
+            </div>
+          </div>
+
+          <details class="field" id="note-details">
+            <summary>メモ</summary>
+            <label class="visually-hidden" for="note">メモ</label>
+            <textarea id="note" maxlength="100" rows="2" placeholder="100文字まで"></textarea>
+          </details>
+
+          <button type="submit" class="btn primary block" id="save-btn" disabled>保存</button>
+        </form>
+      </section>
+
+      <!-- ダッシュボード -->
+      <section class="view" id="view-dashboard" hidden></section>
+
+      <!-- 履歴 -->
+      <section class="view" id="view-history" hidden></section>
+
+      <!-- 設定 -->
+      <section class="view" id="view-settings" hidden></section>
+
+      <!-- ヘルプ -->
+      <section class="view" id="view-help" hidden>
+        <section class="card">
+          <h2>種類の分類ルール</h2>
+          <ul>
+            <li>コンビニコーヒー、自販機のその場抽出・焙煎タイプは、すべて「ドリップ」にします(ラテ系は「ラテ」)。</li>
+            <li>「豆購入」は支出には含めますが、杯数・1杯あたり単価には含めません。</li>
+            <li>自宅で淹れた一杯は 0 円で記録すると、杯数だけ数えられます。</li>
+          </ul>
+        </section>
+        <section class="card">
+          <h2>データの保存について</h2>
+          <p>記録はこの端末のブラウザ内にだけ保存され、外部には送信しません。ブラウザのデータ削除やアンインストールで消えることがあるため、設定から定期的に CSV でバックアップしてください。</p>
+        </section>
+      </section>
+    </main>
+
+    <nav class="tabbar" aria-label="画面切替">
+      <button type="button" class="tab" data-view="record" aria-current="page">
+        <span class="tab-icon" aria-hidden="true">＋</span><span>記録</span>
+      </button>
+      <button type="button" class="tab" data-view="dashboard">
+        <span class="tab-icon" aria-hidden="true">▤</span><span>ダッシュボード</span>
+      </button>
+      <button type="button" class="tab" data-view="history">
+        <span class="tab-icon" aria-hidden="true">☰</span><span>履歴</span>
+      </button>
+    </nav>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+      <span id="toast-msg"></span>
+      <button type="button" class="link-btn" id="toast-action" hidden></button>
+    </div>
+  </body>
+</html>
