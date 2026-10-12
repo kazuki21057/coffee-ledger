@@ -807,3 +807,105 @@ details > summary::-webkit-details-marker {
   cursor: pointer;
   font-size: 1.05rem;
 }
+
+/* ---- 設定 ---- */
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+.import-preview {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.import-preview ul {
+  margin: 6px 0;
+  padding-left: 1.2em;
+}
+
+.import-errors {
+  max-height: 180px;
+  overflow: auto;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.master-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.master-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.master-row.archived .name-input {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.master-row .name-input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.master-row .ctrls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--tap);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+}
+
+.mini-btn {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.mini-btn.text {
+  padding: 0 8px;
+  font-size: 0.85rem;
+}
+
+.mini-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.add-row input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.store-group h3 {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}

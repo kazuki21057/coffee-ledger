@@ -18,8 +18,10 @@ import {
   compareSeries,
   filterEntries,
   groupByDate,
+  findByName,
 } from './aggregate.js';
 import * as charts from './charts.js';
+import { toCSV, parseImport, planImport, csvFilename, downloadText, readFileText } from './csv.js';
 
 // ---------------------------------------------------------------- 共通
 
@@ -1059,6 +1061,334 @@ function setupHistory() {
 
 renderers.history = renderHistory;
 
+// ---------------------------------------------------------------- 設定
+
+let pendingImport = null;
+
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+function renderSettings() {
+  $('last-export').textContent = state.settings.lastExportAt ? formatDateTime(state.settings.lastExportAt) : 'まだありません';
+  const ws = weekStart();
+  $('week-start').replaceChildren(...WEEKDAYS.map((w, i) => h('option', { value: String(i), selected: i === ws }, `${w}曜日`)));
+  renderPersistStatus();
+  renderMasterList('types-list', state.types, 'types', (t) => [
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.countsAsCup, onchange: (ev) => saveMaster('types', { ...t, countsAsCup: ev.target.checked }) }), '杯数に数える'),
+  ]);
+  renderMasterList('cats-list', state.placeCategories, 'placeCategories', (c) => [
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: c.hasStores, onchange: (ev) => saveMaster('placeCategories', { ...c, hasStores: ev.target.checked }) }), '店を持つ'),
+  ]);
+  renderStores();
+}
+
+/** 種類・区分・店の 1 行(名前変更・並べ替え・非表示) */
+function masterRow(item, list, store, extra) {
+  const idx = list.indexOf(item);
+  const nameInput = h('input', {
+    type: 'text',
+    class: 'name-input',
+    value: item.name,
+    maxlength: store === 'places' ? '40' : '20',
+    'aria-label': `${item.name}の名前`,
+    onchange: (ev) => renameMaster(store, item, ev.target),
+  });
+  return h(
+    'li',
+    { class: `master-row${item.archived ? ' archived' : ''}` },
+    nameInput,
+    h(
+      'div',
+      { class: 'ctrls' },
+      ...extra(item),
+      h('button', { type: 'button', class: 'mini-btn', 'aria-label': `${item.name}を上へ`, disabled: idx === 0, onclick: () => moveMaster(store, list, idx, -1) }, '↑'),
+      h('button', { type: 'button', class: 'mini-btn', 'aria-label': `${item.name}を下へ`, disabled: idx === list.length - 1, onclick: () => moveMaster(store, list, idx, 1) }, '↓'),
+      h(
+        'button',
+        { type: 'button', class: 'mini-btn text', 'aria-pressed': String(item.archived), onclick: () => saveMaster(store, { ...item, archived: !item.archived }) },
+        item.archived ? '再表示' : '非表示',
+      ),
+    ),
+  );
+}
+
+function renderMasterList(listId, items, store, extra) {
+  $(listId).replaceChildren(...items.map((it) => masterRow(it, items, store, extra)));
+}
+
+function renderStores() {
+  const groups = state.placeCategories.filter((c) => c.hasStores || state.places.some((p) => p.categoryId === c.id));
+  $('stores-list').replaceChildren(
+    ...groups.map((c) => {
+      const stores = state.places.filter((p) => p.categoryId === c.id);
+      return h(
+        'div',
+        { class: 'store-group' },
+        h('h3', {}, c.hasStores ? c.name : `${c.name}(店を持たない区分)`),
+        stores.length
+          ? h(
+              'ul',
+              { class: 'master-list' },
+              ...stores.map((p) =>
+                masterRow(p, stores, 'places', (pl) => [
+                  h(
+                    'select',
+                    { 'aria-label': `${pl.name}の区分`, onchange: (ev) => moveStoreCategory(pl, ev.target) },
+                    ...state.placeCategories.map((cat) => h('option', { value: cat.id, selected: cat.id === pl.categoryId }, cat.name)),
+                  ),
+                ]),
+              ),
+            )
+          : h('p', { class: 'hint' }, 'まだ店がありません。'),
+      );
+    }),
+  );
+  const sel = $('set-store-cat');
+  const prev = sel.value;
+  const options = state.placeCategories.filter((c) => c.hasStores && !c.archived);
+  sel.replaceChildren(...options.map((c) => h('option', { value: c.id }, c.name)));
+  if (options.some((c) => c.id === prev)) sel.value = prev;
+  $('set-store-add').disabled = options.length === 0;
+}
+
+async function saveMaster(store, item) {
+  try {
+    await db.put(store, item);
+  } catch (err) {
+    console.error(err);
+    showToast('保存に失敗しました');
+  }
+}
+
+function duplicateOf(store, item, name, categoryId = item?.categoryId) {
+  const others = (store === 'types' ? state.types : store === 'placeCategories' ? state.placeCategories : state.places).filter(
+    (x) => x.id !== item?.id,
+  );
+  return store === 'places' ? findPlaceByName(others, categoryId, name) : findByName(others, name);
+}
+
+async function renameMaster(store, item, input) {
+  const name = normalizeName(input.value);
+  if (!name) {
+    input.value = item.name;
+    showToast('名前を空にはできません');
+    return;
+  }
+  if (duplicateOf(store, item, name)) {
+    input.value = item.name;
+    showToast(`「${name}」はすでに登録されています`);
+    return;
+  }
+  await saveMaster(store, { ...item, name });
+}
+
+async function moveMaster(store, list, idx, delta) {
+  const j = idx + delta;
+  if (j < 0 || j >= list.length) return;
+  const reordered = [...list];
+  [reordered[idx], reordered[j]] = [reordered[j], reordered[idx]];
+  try {
+    await db.putMany({ [store]: reordered.map((x, i) => ({ ...x, order: i })) });
+  } catch (err) {
+    console.error(err);
+    showToast('並べ替えに失敗しました');
+  }
+}
+
+async function moveStoreCategory(place, select) {
+  const categoryId = select.value;
+  if (duplicateOf('places', place, place.name, categoryId)) {
+    select.value = place.categoryId;
+    showToast(`移動先に「${place.name}」がすでにあります`);
+    return;
+  }
+  const order = state.places.filter((p) => p.categoryId === categoryId).reduce((m, p) => Math.max(m, p.order), -1) + 1;
+  await saveMaster('places', { ...place, categoryId, order });
+  // 過去の記録の区分も店に合わせて付け替える(店と区分の対応を保つ)
+  const affected = state.entries.filter((e) => e.placeId === place.id && e.placeCategoryId !== categoryId);
+  if (affected.length) {
+    const ts = nowIso();
+    await db.putMany({ entries: affected.map((e) => ({ ...e, placeCategoryId: categoryId, updatedAt: ts })) });
+    showToast(`${affected.length}件の記録の区分を変更しました`);
+  }
+}
+
+async function addMaster(store, inputId, errorId, build) {
+  const input = $(inputId);
+  const err = $(errorId);
+  const name = normalizeName(input.value);
+  err.hidden = true;
+  const fail = (msg) => {
+    err.textContent = msg;
+    err.hidden = false;
+    input.focus();
+  };
+  if (!name) return fail('名前を入力してください');
+  const item = build(name);
+  if (!item) return fail('追加先の区分がありません');
+  if (duplicateOf(store, null, name, item.categoryId)) return fail(`「${name}」はすでに登録されています`);
+  await saveMaster(store, item);
+  input.value = '';
+  showToast(`「${name}」を追加しました`, null, 2500);
+}
+
+const nextOrderOf = (items) => items.reduce((m, x) => Math.max(m, x.order), -1) + 1;
+
+async function renderPersistStatus() {
+  const el = $('persist-status');
+  const btn = $('persist-btn');
+  if (!navigator.storage?.persisted) {
+    el.textContent = 'このブラウザはストレージの永続化に対応していません。CSVで定期的にバックアップしてください。';
+    btn.hidden = true;
+    return;
+  }
+  const persisted = await navigator.storage.persisted();
+  el.textContent = persisted
+    ? '永続化されています。ブラウザが容量不足で自動的にデータを消すことはありません(ブラウザのデータ削除やアンインストールでは消えます)。'
+    : '永続化されていません。容量不足時にブラウザがデータを消す可能性があります。CSVで定期的にバックアップしてください。';
+  btn.hidden = persisted;
+}
+
+async function requestPersist() {
+  try {
+    if (!navigator.storage?.persist) return false;
+    return await navigator.storage.persist();
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+async function exportCsv() {
+  try {
+    const text = toCSV(state.entries, state);
+    downloadText(text, csvFilename(today()));
+    await db.setSetting('lastExportAt', nowIso());
+    showToast(`${state.entries.length}件を書き出しました`);
+  } catch (err) {
+    console.error(err);
+    showToast('書き出しに失敗しました');
+  }
+}
+
+async function onImportFile(ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  const box = $('import-preview');
+  try {
+    const parsed = parseImport(await readFileText(file));
+    if (parsed.fatal) {
+      pendingImport = null;
+      box.replaceChildren(h('p', { class: 'error' }, `読み込めませんでした: ${parsed.fatal}`));
+      box.hidden = false;
+      return;
+    }
+    const plan = planImport(parsed, state.entries, state, newId);
+    pendingImport = plan;
+    const newMasters = [
+      ...plan.newTypes.map((t) => `種類「${t.name}」`),
+      ...plan.newPlaceCategories.map((c) => `区分「${c.name}」`),
+      ...plan.newPlaces.map((p) => `店「${p.name}」`),
+    ];
+    const canApply = plan.toAdd.length + plan.toUpdate.length > 0;
+    box.replaceChildren(
+      h('strong', {}, `読み込み内容の確認(${file.name})`),
+      h(
+        'ul',
+        {},
+        h('li', {}, `追加: ${plan.toAdd.length}件`),
+        h('li', {}, `更新: ${plan.toUpdate.length}件`),
+        h('li', {}, `変更なし(既存の方が新しい・同じ): ${plan.unchanged}件`),
+        h('li', {}, `エラー行(取り込みません): ${parsed.errors.length}件`),
+        newMasters.length ? h('li', {}, `新しく作成: ${newMasters.join('、')}`) : null,
+      ),
+      parsed.errors.length
+        ? h('div', { class: 'import-errors' }, ...parsed.errors.map((e) => h('div', {}, `${e.line}行目: ${e.message}`)))
+        : null,
+      h(
+        'div',
+        { class: 'row' },
+        h('button', { type: 'button', class: 'btn', disabled: !canApply, onclick: applyImport }, '取り込む'),
+        h('button', { type: 'button', class: 'btn secondary', onclick: cancelImport }, 'キャンセル'),
+      ),
+    );
+    box.hidden = false;
+  } catch (err) {
+    console.error(err);
+    box.replaceChildren(h('p', { class: 'error' }, 'ファイルを読み込めませんでした'));
+    box.hidden = false;
+  }
+}
+
+function cancelImport() {
+  pendingImport = null;
+  $('import-preview').hidden = true;
+}
+
+async function applyImport() {
+  const plan = pendingImport;
+  if (!plan) return;
+  try {
+    await db.putMany({
+      types: plan.newTypes,
+      placeCategories: plan.newPlaceCategories,
+      places: plan.newPlaces,
+      entries: [...plan.toAdd, ...plan.toUpdate],
+    });
+    cancelImport();
+    showToast(`取り込みました(追加${plan.toAdd.length}件・更新${plan.toUpdate.length}件)`);
+  } catch (err) {
+    console.error(err);
+    showToast('取り込みに失敗しました');
+  }
+}
+
+function setupSettings() {
+  $('week-start').addEventListener('change', (ev) => db.setSetting('weekStart', Number(ev.target.value)));
+  $('export-btn').addEventListener('click', exportCsv);
+  $('import-file').addEventListener('change', onImportFile);
+  $('persist-btn').addEventListener('click', async () => {
+    const ok = await requestPersist();
+    showToast(ok ? '永続化されました' : 'ブラウザに許可されませんでした');
+    renderPersistStatus();
+  });
+  const onEnter = (inputId, fn) =>
+    $(inputId).addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && !ev.isComposing) {
+        ev.preventDefault();
+        fn();
+      }
+    });
+  const addType = () =>
+    addMaster('types', 'type-new', 'type-error', (name) => ({ id: newId(), name, countsAsCup: true, order: nextOrderOf(state.types), archived: false }));
+  const addCat = () =>
+    addMaster('placeCategories', 'cat-new', 'cat-error', (name) => ({
+      id: newId(),
+      name,
+      hasStores: false,
+      order: nextOrderOf(state.placeCategories),
+      archived: false,
+    }));
+  const addPlace = () =>
+    addMaster('places', 'set-store-name', 'set-store-error', (name) => {
+      const categoryId = $('set-store-cat').value;
+      if (!categoryId) return null;
+      return { id: newId(), categoryId, name, order: nextOrderOf(state.places.filter((p) => p.categoryId === categoryId)), archived: false };
+    });
+  $('type-add').addEventListener('click', addType);
+  $('cat-add').addEventListener('click', addCat);
+  $('set-store-add').addEventListener('click', addPlace);
+  onEnter('type-new', addType);
+  onEnter('cat-new', addCat);
+  onEnter('set-store-name', addPlace);
+}
+
+renderers.settings = renderSettings;
+
 // ---------------------------------------------------------------- 起動
 
 async function start() {
@@ -1066,12 +1396,19 @@ async function start() {
   setupRecord();
   setupDashboard();
   setupHistory();
+  setupSettings();
   db.onChange(queueRefresh);
   try {
     await refresh();
   } catch (err) {
     console.error(err);
     showToast('データベースを開けませんでした。ブラウザの設定を確認してください。', null, 10000);
+    return;
+  }
+  // 初回起動時にストレージの永続化を要求する(結果は設定画面に表示)
+  if (!state.settings.persistRequested) {
+    await requestPersist();
+    await db.setSetting('persistRequested', true);
   }
   // 日付をまたいで開いたままでも「今日」がずれないように
   document.addEventListener('visibilitychange', () => {

@@ -190,7 +190,67 @@
       </section>
 
       <!-- 設定 -->
-      <section class="view" id="view-settings" hidden></section>
+      <section class="view" id="view-settings" hidden>
+        <section class="card">
+          <h2>バックアップ(CSV)</h2>
+          <p>最終バックアップ: <strong id="last-export"></strong></p>
+          <div class="row">
+            <button type="button" class="btn" id="export-btn">CSVを書き出す</button>
+            <label class="btn secondary file-btn">
+              CSVを読み込む
+              <input type="file" id="import-file" accept=".csv,text/csv" class="visually-hidden" />
+            </label>
+          </div>
+          <div class="import-preview" id="import-preview" hidden></div>
+        </section>
+
+        <section class="card">
+          <h2>ストレージの永続化</h2>
+          <p id="persist-status"></p>
+          <button type="button" class="btn secondary small" id="persist-btn" hidden>永続化を要求する</button>
+        </section>
+
+        <section class="card">
+          <h2>週の開始曜日</h2>
+          <label class="visually-hidden" for="week-start">週の開始曜日</label>
+          <select id="week-start"></select>
+        </section>
+
+        <section class="card">
+          <h2>種類</h2>
+          <ul class="master-list" id="types-list"></ul>
+          <div class="row add-row">
+            <label class="visually-hidden" for="type-new">新しい種類の名前</label>
+            <input type="text" id="type-new" placeholder="新しい種類" maxlength="20" />
+            <button type="button" class="btn small" id="type-add">追加</button>
+          </div>
+          <p class="error" id="type-error" role="alert" hidden></p>
+        </section>
+
+        <section class="card">
+          <h2>場所の区分</h2>
+          <ul class="master-list" id="cats-list"></ul>
+          <div class="row add-row">
+            <label class="visually-hidden" for="cat-new">新しい区分の名前</label>
+            <input type="text" id="cat-new" placeholder="新しい区分" maxlength="20" />
+            <button type="button" class="btn small" id="cat-add">追加</button>
+          </div>
+          <p class="error" id="cat-error" role="alert" hidden></p>
+        </section>
+
+        <section class="card">
+          <h2>店</h2>
+          <div id="stores-list"></div>
+          <div class="row add-row">
+            <label class="visually-hidden" for="set-store-cat">追加先の区分</label>
+            <select id="set-store-cat"></select>
+            <label class="visually-hidden" for="set-store-name">新しい店の名前</label>
+            <input type="text" id="set-store-name" placeholder="新しい店" maxlength="40" />
+            <button type="button" class="btn small" id="set-store-add">追加</button>
+          </div>
+          <p class="error" id="set-store-error" role="alert" hidden></p>
+        </section>
+      </section>
 
       <!-- ヘルプ -->
       <section class="view" id="view-help" hidden>
