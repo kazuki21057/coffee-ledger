@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- アイコンの原図(PNG はここから生成する。maskable は背景を全面にし、図形を安全領域内に縮小) -->
+  <rect width="512" height="512" rx="112" fill="#6f4e37"/>
+  <g fill="none" stroke="#f7efe7" stroke-linecap="round" stroke-width="18">
+    <path d="M206 96c-18 22 18 38 0 62M256 86c-18 24 18 42 0 72M306 96c-18 22 18 38 0 62"/>
+  </g>
+  <path d="M128 196h232v92c0 70-52 120-116 120s-116-50-116-120z" fill="#f7efe7"/>
+  <path d="M360 222h18c34 0 56 22 56 52s-22 54-56 54h-30" fill="none" stroke="#f7efe7" stroke-width="26" stroke-linecap="round"/>
+  <rect x="104" y="410" width="304" height="22" rx="11" fill="#f7efe7"/>
+</svg>

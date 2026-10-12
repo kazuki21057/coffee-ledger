@@ -1,0 +1,18 @@
+{
+  "name": "コーヒー支出トラッカー",
+  "short_name": "コーヒー家計簿",
+  "description": "コーヒーに使った金額を記録し、期間ごとの支出を確認する個人用アプリ",
+  "lang": "ja",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f3ef",
+  "theme_color": "#6f4e37",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1389,6 +1389,44 @@ function setupSettings() {
 
 renderers.settings = renderSettings;
 
+// ---------------------------------------------------------------- PWA(Service Worker)
+
+function setupServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  // 初回インストール時の clients.claim() でも controllerchange が起きるため、
+  // ユーザーが「再読み込み」を押したときだけ再読み込みする
+  let updateRequested = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!updateRequested) return;
+    updateRequested = false;
+    window.location.reload();
+  });
+  const showUpdate = (worker) => {
+    $('update-banner').hidden = false;
+    $('update-reload').onclick = () => {
+      updateRequested = true;
+      worker.postMessage('SKIP_WAITING');
+    };
+  };
+  navigator.serviceWorker
+    .register('./sw.js')
+    .then((reg) => {
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const worker = reg.installing;
+        worker?.addEventListener('statechange', () => {
+          // 既存の版が動いている状態で新しい版が入ったときだけ通知する(初回インストール時は出さない)
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+        });
+      });
+      // 開いたままでも定期的に更新を確認する
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    })
+    .catch((err) => console.error('Service Worker の登録に失敗しました', err));
+}
+
 // ---------------------------------------------------------------- 起動
 
 async function start() {
@@ -1397,6 +1435,7 @@ async function start() {
   setupDashboard();
   setupHistory();
   setupSettings();
+  setupServiceWorker();
   db.onChange(queueRefresh);
   try {
     await refresh();
