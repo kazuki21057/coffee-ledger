@@ -18,7 +18,7 @@
   <body>
     <header class="app-header">
       <button type="button" class="icon-btn" id="back-btn" aria-label="戻る" hidden>←</button>
-      <h1 id="page-title">記録</h1>
+      <h1 id="page-title">ダッシュボード</h1>
       <div class="menu-wrap">
         <button type="button" class="icon-btn" id="menu-btn" aria-label="メニュー" aria-haspopup="true" aria-expanded="false">⋮</button>
         <div class="menu" id="menu" role="menu" hidden>
@@ -35,7 +35,7 @@
 
     <main id="main">
       <!-- 記録 -->
-      <section class="view" id="view-record" aria-labelledby="page-title">
+      <section class="view" id="view-record" aria-labelledby="page-title" hidden>
         <div class="notice" id="backup-notice" hidden>
           <span>最後のバックアップから30日以上たっています。</span>
           <button type="button" class="link-btn" id="backup-notice-open">CSVを書き出す</button>
@@ -105,7 +105,7 @@
       </section>
 
       <!-- ダッシュボード -->
-      <section class="view" id="view-dashboard" hidden>
+      <section class="view" id="view-dashboard">
         <div class="card empty-state" id="dash-empty" hidden>
           <p>まだ記録がありません。</p>
           <button type="button" class="btn primary" id="dash-go-record">記録する</button>
@@ -273,11 +273,11 @@
     </main>
 
     <nav class="tabbar" aria-label="画面切替">
-      <button type="button" class="tab" data-view="record" aria-current="page">
-        <span class="tab-icon" aria-hidden="true">＋</span><span>記録</span>
-      </button>
-      <button type="button" class="tab" data-view="dashboard">
+      <button type="button" class="tab" data-view="dashboard" aria-current="page">
         <span class="tab-icon" aria-hidden="true">▤</span><span>ダッシュボード</span>
+      </button>
+      <button type="button" class="tab tab-record" data-view="record">
+        <span class="tab-icon" aria-hidden="true">＋</span><span>記録する</span>
       </button>
       <button type="button" class="tab" data-view="history">
         <span class="tab-icon" aria-hidden="true">☰</span><span>履歴</span>

@@ -55,6 +55,15 @@ try {
   const count = () => p.evaluate(async () => (await (await import('./js/db.js')).getAll('entries')).length);
 
   await p.goto(URL_);
+  await p.waitForSelector('#dash-empty:not([hidden])');
+  check('起動時の画面はダッシュボード', (await p.textContent('#page-title')) === 'ダッシュボード' && (await p.isHidden('#view-record')));
+  const fab = await p.$eval('.tab-record .tab-icon', (el) => {
+    const r = el.getBoundingClientRect();
+    const bar = document.querySelector('.tabbar').getBoundingClientRect();
+    return { cx: r.left + r.width / 2, w: innerWidth, raised: r.top < bar.top, size: Math.min(r.width, r.height) };
+  });
+  check('「記録する」ボタンが下部中央に浮いて表示', Math.abs(fab.cx - fab.w / 2) < 2 && fab.raised && fab.size >= 44, JSON.stringify(fab));
+  await p.click('.tab-record');
   await p.waitForSelector('#type-chips .chip');
   await p.evaluate(() => navigator.serviceWorker?.ready);
   check('初期マスタ(種類5・区分4)', (await p.$$('#type-chips .chip')).length === 5 && (await p.$$('#cat-chips .chip')).length === 4);
@@ -134,10 +143,10 @@ try {
 
   // オフライン
   await p.reload();
-  await p.waitForSelector('#type-chips .chip');
+  await p.waitForSelector('.tab-record');
   await ctx.setOffline(true);
   await p.reload();
-  await p.waitForSelector('#type-chips .chip', { timeout: 5000 });
+  await p.waitForSelector('#dash-body:not([hidden])', { timeout: 5000 });
   await p.click('.tab[data-view=dashboard]');
   check('オフラインで起動・ダッシュボード表示', await p.evaluate(() => typeof Chart === 'function'));
   await ctx.setOffline(false);

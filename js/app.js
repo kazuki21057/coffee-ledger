@@ -31,8 +31,8 @@ const state = {
   placeCategories: [],
   places: [],
   settings: {},
-  view: 'record',
-  prevTab: 'record',
+  view: 'dashboard',
+  prevTab: 'dashboard',
 };
 
 const $ = (id) => document.getElementById(id);
