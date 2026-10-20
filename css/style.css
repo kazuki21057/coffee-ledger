@@ -682,6 +682,11 @@ details > summary {
   color: var(--danger);
 }
 
+.planned-row > label {
+  flex-basis: 100%;
+  font-weight: 600;
+}
+
 .planned-row input {
   width: 6em;
   text-align: right;
