@@ -154,7 +154,7 @@ try {
 
   await p.click('#menu-btn');
   await p.click('#menu [data-view=help]');
-  check('ヘルプにバージョンと更新履歴', /^バージョン \d+\.\d+\.\d+/.test(await p.textContent('#app-version')) && (await p.$$('#changelog h3')).length >= 1, await p.textContent('#app-version'));
+  check('ヘルプにバージョンと更新履歴', /^\d+\.\d+\.\d+\(\d{4}\/\d{1,2}\/\d{1,2} 更新\)$/.test(await p.textContent('#app-version')) && (await p.$$('#changelog h3')).length >= 1, await p.textContent('#app-version'));
   check('横スクロールなし(幅360px)', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
   check('コンソールエラーなし', errors.length === 0, errors.slice(0, 5).join(' | '));
 } catch (err) {
