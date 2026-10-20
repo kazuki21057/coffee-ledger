@@ -24,6 +24,7 @@
         <div class="menu" id="menu" role="menu" hidden>
           <button type="button" role="menuitem" data-view="settings">設定</button>
           <button type="button" role="menuitem" data-view="help">ヘルプ</button>
+          <button type="button" role="menuitem" id="menu-share">共有</button>
         </div>
       </div>
     </header>
@@ -341,6 +342,18 @@
         <span class="tab-icon" aria-hidden="true">☰</span><span>履歴</span>
       </button>
     </nav>
+
+    <dialog class="share-dialog" id="share-dialog" aria-labelledby="share-title">
+      <h2 id="share-title">このアプリを共有</h2>
+      <p class="hint">下のURLをコピーして送ってください。記録は各自の端末にだけ保存されるため、あなたの記録は共有されません。</p>
+      <label class="visually-hidden" for="share-url">このページのURL</label>
+      <input type="text" id="share-url" readonly />
+      <p class="share-status" id="share-status" role="status" aria-live="polite"></p>
+      <div class="row share-actions">
+        <button type="button" class="btn" id="share-copy">コピー</button>
+        <button type="button" class="btn secondary" id="share-close">閉じる</button>
+      </div>
+    </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden>
       <span id="toast-msg"></span>

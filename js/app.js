@@ -192,12 +192,54 @@ function setupNavigation() {
   for (const item of document.querySelectorAll('#menu [data-view]')) {
     item.addEventListener('click', () => showView(item.dataset.view));
   }
+  $('menu-share').addEventListener('click', openShare);
+  $('share-copy').addEventListener('click', copyShareUrl);
+  $('share-close').addEventListener('click', () => $('share-dialog').close());
+  // 背景(ダイアログの外側)をタップしたら閉じる
+  $('share-dialog').addEventListener('click', (ev) => {
+    if (ev.target === $('share-dialog')) $('share-dialog').close();
+  });
   document.addEventListener('click', (ev) => {
     if (!ev.target.closest('.menu-wrap')) closeMenu();
   });
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') closeMenu();
   });
+}
+
+// ---------------------------------------------------------------- 共有
+
+/** 共有用の URL(ページ内の # や ? は除く) */
+function shareUrl() {
+  return `${location.origin}${location.pathname}`;
+}
+
+function openShare() {
+  closeMenu();
+  const input = $('share-url');
+  input.value = shareUrl();
+  $('share-status').textContent = '';
+  $('share-status').classList.remove('error');
+  $('share-dialog').showModal();
+  input.focus();
+  input.select();
+}
+
+async function copyShareUrl() {
+  const input = $('share-url');
+  const status = $('share-status');
+  status.classList.remove('error');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    status.textContent = 'コピーしました';
+  } catch {
+    // クリップボード API が使えない環境では選択してコピー操作を試みる
+    input.focus();
+    input.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    status.textContent = ok ? 'コピーしました' : 'コピーできませんでした。URLを長押しして選択・コピーしてください。';
+    if (!ok) status.classList.add('error');
+  }
 }
 
 // ---------------------------------------------------------------- データ

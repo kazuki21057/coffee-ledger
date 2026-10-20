@@ -735,6 +735,44 @@ details > summary {
   gap: 6px;
 }
 
+.share-dialog {
+  width: min(92vw, 480px);
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.share-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.share-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+
+.share-dialog input {
+  width: 100%;
+  font-size: 0.95rem;
+}
+
+.share-status {
+  min-height: 1.4em;
+  margin: 6px 0;
+  font-size: 0.85rem;
+  color: var(--ok);
+}
+
+.share-status.error {
+  color: var(--danger);
+}
+
+.share-actions {
+  justify-content: flex-end;
+}
+
 .stat.wide {
   grid-column: 1 / -1;
 }

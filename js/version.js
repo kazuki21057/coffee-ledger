@@ -5,6 +5,11 @@
 
 export const CHANGELOG = [
   {
+    version: '1.6.0',
+    date: '2026-10-20',
+    changes: ['右上メニューに「共有」を追加(このアプリのURLを表示し、ボタンでコピーできる)'],
+  },
+  {
     version: '1.5.0',
     date: '2026-10-20',
     changes: [

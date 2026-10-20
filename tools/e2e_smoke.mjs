@@ -182,6 +182,13 @@ try {
   await ctx.setOffline(false);
 
   await p.click('#menu-btn');
+  await p.click('#menu-share');
+  const shared = await p.inputValue('#share-url');
+  await p.click('#share-copy');
+  await p.waitForTimeout(150);
+  check('共有でページのURLを表示しコピーできる', shared === URL_ && (await p.textContent('#share-status')).length > 0, `${shared} / ${await p.textContent('#share-status')}`);
+  await p.click('#share-close');
+  await p.click('#menu-btn');
   await p.click('#menu [data-view=help]');
   check('ヘルプにバージョンと更新履歴', /^\d+\.\d+\.\d+\(\d{4}\/\d{1,2}\/\d{1,2} 更新\)$/.test(await p.textContent('#app-version')) && (await p.$$('#changelog h3')).length >= 1, await p.textContent('#app-version'));
   check('横スクロールなし(幅360px)', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
