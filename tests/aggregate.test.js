@@ -18,6 +18,11 @@ import {
   needsBackupReminder,
   elapsedDays,
   perDayAmount,
+  bagStatus,
+  bagCupCounts,
+  openBags,
+  beanOrder,
+  lastPurchaseOf,
 } from '../js/aggregate.js';
 import { TYPES, PLACES, entry } from './fixtures.js';
 
@@ -359,5 +364,65 @@ describe('履歴用ユーティリティ', () => {
     assert.equal(needsBackupReminder(null, e, '2026-10-12'), true);
     assert.equal(needsBackupReminder(null, [entry('2026-10-01', 'drip', 1)], '2026-10-12'), false);
     assert.equal(needsBackupReminder(null, [], '2026-10-12'), false);
+  });
+});
+
+describe('豆の袋(予定杯数・使い切り・1杯あたり単価)', () => {
+  const bag = (id, date, amount, plannedCups, extra = {}) => entry(date, 'beans', amount, 'cafe', null, { id, beanId: 'b1', plannedCups, closedAt: null, ...extra });
+  const cup = (date, bagId) => entry(date, 'drip', 0, 'home', null, { bagId });
+
+  test('開封中は予定単価、杯数が増えるほど現在単価は下がる', () => {
+    const b = bag('bag1', '2026-10-01', 1600, 16);
+    const one = bagStatus(b, bagCupCounts([b, cup('2026-10-02', 'bag1')]));
+    assert.equal(one.count, 1);
+    assert.equal(one.plannedUnit, 100);
+    assert.equal(one.currentUnit, 1600);
+    assert.equal(one.unitCost, 100);
+    const four = bagStatus(b, bagCupCounts([b, ...[2, 3, 4, 5].map((d) => cup(`2026-10-0${d}`, 'bag1'))]));
+    assert.equal(four.currentUnit, 400);
+  });
+  test('使い切ると実績単価(購入金額 ÷ 実際の杯数)', () => {
+    const b = bag('bag1', '2026-10-01', 1500, 16, { closedAt: '2026-10-20' });
+    const cups = Array.from({ length: 10 }, (_, i) => cup(`2026-10-${String(i + 2).padStart(2, '0')}`, 'bag1'));
+    const s = bagStatus(b, bagCupCounts([b, ...cups]));
+    assert.equal(s.closed, true);
+    assert.equal(s.unitCost, 150);
+  });
+  test('合計は購入日に全額、杯は淹れた日に数え、1杯平均には袋の単価を使う', () => {
+    const b = bag('bag1', '2026-09-30', 1600, 16);
+    const es = [b, cup('2026-10-01', 'bag1'), cup('2026-10-02', 'bag1'), entry('2026-10-03', 'drip', 120, 'conv', 'seven')];
+    const sep = summarize(es, TYPES, periodRange('month', '2026-09-30'));
+    assert.equal(sep.total, 1600);
+    assert.equal(sep.cups, 0);
+    const oct = summarize(es, TYPES, periodRange('month', '2026-10-15'));
+    assert.equal(oct.total, 120);
+    assert.equal(oct.cups, 3);
+    assert.equal(oct.avgPerCup, (100 + 100 + 120) / 3);
+  });
+  test('開封中の袋の一覧(使い切り・予定杯数なしを除く、新しい順)', () => {
+    const es = [
+      bag('a', '2026-10-01', 1000, 10),
+      bag('b', '2026-10-05', 1000, 10),
+      bag('c', '2026-10-06', 1000, 10, { closedAt: '2026-10-10' }),
+      entry('2026-10-07', 'beans', 800), // 旧形式(予定杯数なし)
+    ];
+    assert.deepEqual(
+      openBags(es).map((e) => e.id),
+      ['b', 'a'],
+    );
+  });
+  test('豆の並びは最後に買った日が新しい順、直近の購入記録', () => {
+    const beans = [
+      { id: 'b1', name: 'A', order: 0, archived: false },
+      { id: 'b2', name: 'B', order: 1, archived: false },
+      { id: 'b3', name: 'C', order: 2, archived: true },
+    ];
+    const es = [bag('x', '2026-09-01', 1000, 10), { ...bag('y', '2026-10-01', 1200, 12), beanId: 'b2' }];
+    assert.deepEqual(
+      beanOrder(es, beans).map((b) => b.id),
+      ['b2', 'b1'],
+    );
+    assert.equal(lastPurchaseOf(es, 'b2').plannedCups, 12);
+    assert.equal(lastPurchaseOf(es, 'b3'), null);
   });
 });

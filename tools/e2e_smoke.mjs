@@ -133,6 +133,30 @@ try {
   check('1日あたり平均を表示', /^¥[\d,]+$/.test(await p.textContent('#sum-perday')) && /^\d+日間で計算$/.test(await p.textContent('#sum-perday-sub')), await p.textContent('#sum-perday'));
   check('グラフ描画', await p.evaluate(() => typeof Chart === 'function' && !!Chart.getChart(document.getElementById('chart-series'))));
 
+  // 豆: 新しい豆で購入(予定10杯・¥1,000)→ ダッシュボードで +1杯 → 使い切り
+  await p.click('.tab-record');
+  await p.click('#type-chips .chip:has-text("豆購入")');
+  check('豆購入で豆の欄(豆0件なら入力欄)を表示', (await p.isVisible('#bean-fieldset')) && (await p.isVisible('#bean-new-name')));
+  await p.fill('#bean-new-name', 'テスト豆');
+  await p.press('#bean-new-name', 'Enter');
+  await p.waitForTimeout(150);
+  await p.fill('#planned-cups', '10');
+  await p.dispatchEvent('#planned-cups', 'input');
+  await p.fill('#amount', '1000');
+  await p.dispatchEvent('#amount', 'input');
+  await p.click('#save-btn');
+  await p.waitForTimeout(150);
+  await p.click('.tab[data-view=dashboard]');
+  const bagText = await p.textContent('#bag-list');
+  check('開封中の豆に袋と予定単価を表示', bagText.includes('テスト豆') && bagText.includes('予定10杯') && bagText.includes('¥100'), bagText);
+  const cups0 = await p.textContent('#sum-cups');
+  await p.click('#bag-list button:has-text("+1杯")');
+  await p.waitForTimeout(200);
+  check('+1杯でその日の杯数が増える', (await p.textContent('#sum-cups')) !== cups0 && (await p.textContent('#bag-list')).includes('1杯 / 予定10杯'), `${cups0}→${await p.textContent('#sum-cups')}`);
+  await p.click('#bag-list button:has-text("使い切った")');
+  await p.waitForTimeout(200);
+  check('使い切ると開封中の一覧から消える', await p.isHidden('#bags-card'));
+
   // 履歴: 編集と削除
   await p.click('.tab[data-view=history]');
   const items = (await p.$$('.item')).length;

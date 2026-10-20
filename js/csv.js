@@ -2,7 +2,9 @@
 // 形式: UTF-8(BOM 付き)・カンマ区切り・CRLF・RFC 4180 のクォート
 import { isValidDate, normalizeName, findByName, findPlaceByName, compareRecency } from './aggregate.js';
 
-export const CSV_COLUMNS = ['id', 'date', 'amount', 'type', 'placeCategory', 'place', 'note', 'createdAt', 'updatedAt'];
+// 1.0〜1.3 の 9 列(読み込みのみ対応)と、豆の袋の情報を末尾に足した 13 列(1.4〜)
+export const CSV_COLUMNS_V1 = ['id', 'date', 'amount', 'type', 'placeCategory', 'place', 'note', 'createdAt', 'updatedAt'];
+export const CSV_COLUMNS = [...CSV_COLUMNS_V1, 'bean', 'plannedCups', 'closedAt', 'bagId'];
 const BOM = '﻿';
 const NOTE_MAX = 100;
 
@@ -12,10 +14,11 @@ function escapeField(value) {
 }
 
 /** 記録を CSV 文字列(BOM 付き)にする。種類・区分・店は表示名で出力 */
-export function toCSV(entries, { types, placeCategories, places }) {
+export function toCSV(entries, { types, placeCategories, places, beans = [] }) {
   const typeName = new Map(types.map((t) => [t.id, t.name]));
   const catName = new Map(placeCategories.map((c) => [c.id, c.name]));
   const placeName = new Map(places.map((p) => [p.id, p.name]));
+  const beanName = new Map(beans.map((b) => [b.id, b.name]));
   const rows = [CSV_COLUMNS.join(',')];
   const sorted = [...entries].sort((a, b) => -compareRecency(a, b));
   for (const e of sorted) {
@@ -30,6 +33,10 @@ export function toCSV(entries, { types, placeCategories, places }) {
         e.note ?? '',
         e.createdAt,
         e.updatedAt,
+        e.beanId ? beanName.get(e.beanId) ?? '' : '',
+        e.plannedCups ?? '',
+        e.closedAt ?? '',
+        e.bagId ?? '',
       ]
         .map(escapeField)
         .join(','),
@@ -107,16 +114,17 @@ export function parseImport(text) {
   const errors = [];
   if (records.length === 0) return { rows: [], errors, fatal: 'ファイルが空です' };
   const header = records[0].fields.map((h) => h.trim());
-  if (header.join(',') !== CSV_COLUMNS.join(',')) {
+  const columns = [CSV_COLUMNS, CSV_COLUMNS_V1].find((c) => header.join(',') === c.join(','));
+  if (!columns) {
     return { rows: [], errors, fatal: `見出し行が不正です(期待: ${CSV_COLUMNS.join(',')})` };
   }
   const rows = [];
   for (const { fields, line } of records.slice(1)) {
-    if (fields.length !== CSV_COLUMNS.length) {
+    if (fields.length !== columns.length) {
       errors.push({ line, message: `列数が不正です(${fields.length} 列)` });
       continue;
     }
-    const [id, date, amount, type, placeCategory, place, note, createdAt, updatedAt] = fields;
+    const [id, date, amount, type, placeCategory, place, note, createdAt, updatedAt, bean = '', planned = '', closedAt = '', bagId = ''] = fields;
     const amountStr = amount.trim();
     let message = null;
     if (id.trim() === '') message = 'id が空です';
@@ -126,6 +134,8 @@ export function parseImport(text) {
     else if (normalizeName(place) !== '' && normalizeName(placeCategory) === '') message = '店が指定されていますが区分が空です';
     else if ([...note].length > NOTE_MAX) message = `メモが ${NOTE_MAX} 文字を超えています`;
     else if (!isValidIso(createdAt) || !isValidIso(updatedAt)) message = '作成日時・更新日時の形式が不正です';
+    else if (planned.trim() !== '' && !/^[1-9]\d*$/.test(planned.trim())) message = `予定杯数は 1 以上の整数で入力してください(${planned})`;
+    else if (closedAt.trim() !== '' && !isValidDate(closedAt.trim())) message = `使い切り日の形式が不正です(${closedAt})`;
     if (message) {
       errors.push({ line, message });
       continue;
@@ -141,6 +151,10 @@ export function parseImport(text) {
       note,
       createdAt: createdAt.trim(),
       updatedAt: updatedAt.trim(),
+      bean: normalizeName(bean),
+      plannedCups: planned.trim() === '' ? null : Number(planned.trim()),
+      closedAt: closedAt.trim() || null,
+      bagId: bagId.trim() || null,
     });
   }
   return { rows, errors, fatal: null };
@@ -168,6 +182,8 @@ export function planImport(parsed, existingEntries, masters, genId) {
   const types = [...masters.types];
   const cats = [...masters.placeCategories];
   const places = [...masters.places];
+  const beans = [...(masters.beans || [])];
+  const newBeans = [];
   const newTypes = [];
   const newCats = [];
   const newPlaces = [];
@@ -210,6 +226,17 @@ export function planImport(parsed, existingEntries, masters, genId) {
     return p.id;
   };
 
+  const resolveBean = (name) => {
+    if (!name) return null;
+    let b = findByName(beans, name);
+    if (!b) {
+      b = { id: genId(), name, order: nextOrder(beans), archived: false };
+      beans.push(b);
+      newBeans.push(b);
+    }
+    return b.id;
+  };
+
   // ファイル内で同じ id が重複した場合も updatedAt が新しい方を採用する
   const incoming = new Map();
   for (const r of parsed.rows) {
@@ -239,9 +266,15 @@ export function planImport(parsed, existingEntries, masters, genId) {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
+    // 豆の袋の情報は値があるときだけ持たせる(旧形式の記録と同じ形を保つ)
+    const beanId = resolveBean(r.bean);
+    if (beanId) entry.beanId = beanId;
+    if (r.plannedCups != null) entry.plannedCups = r.plannedCups;
+    if (r.closedAt) entry.closedAt = r.closedAt;
+    if (r.bagId) entry.bagId = r.bagId;
     (cur ? toUpdate : toAdd).push(entry);
   }
-  return { toAdd, toUpdate, unchanged, newTypes, newPlaceCategories: newCats, newPlaces };
+  return { toAdd, toUpdate, unchanged, newTypes, newPlaceCategories: newCats, newPlaces, newBeans };
 }
 
 /** ファイル名 coffee-log_YYYYMMDD.csv */

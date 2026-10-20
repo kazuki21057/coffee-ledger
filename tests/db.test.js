@@ -37,5 +37,5 @@ test('初期マスタが仕様 4.2 / 4.3 どおり', () => {
 test('初期設定: 週は月曜始まり', () => {
   const s = Object.fromEntries(initialSettings().map((r) => [r.key, r.value]));
   assert.equal(s.weekStart, 1);
-  assert.equal(s.schemaVersion, 1);
+  assert.equal(s.schemaVersion, 2);
 });

@@ -59,6 +59,28 @@
             <div class="chips" id="type-chips"></div>
           </fieldset>
 
+          <fieldset id="bean-fieldset" hidden>
+            <legend>豆 <span class="req">必須</span></legend>
+            <label class="visually-hidden" for="bean-select">豆</label>
+            <select id="bean-select"></select>
+            <div class="store-add" id="bean-add" hidden>
+              <div class="row">
+                <label class="visually-hidden" for="bean-new-name">新しい豆の名前</label>
+                <input type="text" id="bean-new-name" placeholder="豆の名前を入力" maxlength="40" autocomplete="off" enterkeyhint="done" />
+                <button type="button" class="btn small" id="bean-add-btn">追加</button>
+                <button type="button" class="btn small secondary" id="bean-cancel-btn">キャンセル</button>
+              </div>
+              <p class="error" id="bean-error" role="alert" hidden></p>
+            </div>
+            <div class="row planned-row">
+              <label for="planned-cups">予定杯数 <span class="req">必須</span></label>
+              <input type="text" id="planned-cups" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="例: 15" />
+              <span>杯分</span>
+            </div>
+            <p class="hint">淹れた日はダッシュボードの「開封中の豆」から「+1杯」で記録します。使い切ると、購入金額 ÷ 実際の杯数で1杯あたりの金額が決まります。</p>
+            <label class="check" id="bean-closed-wrap" hidden><input type="checkbox" id="bean-closed" /> 使い切った(実際の杯数で1杯あたりを計算)</label>
+          </fieldset>
+
           <fieldset>
             <legend>場所</legend>
             <div class="chips" id="cat-chips"></div>
@@ -132,8 +154,13 @@
             <div class="stat card"><span class="stat-label">合計金額</span><span class="stat-value" id="sum-total"></span></div>
             <div class="stat card"><span class="stat-label">杯数</span><span class="stat-value" id="sum-cups"></span></div>
             <div class="stat card"><span class="stat-label">1日あたり平均</span><span class="stat-value" id="sum-perday"></span><span class="stat-sub" id="sum-perday-sub"></span></div>
-            <div class="stat card"><span class="stat-label">1杯あたり平均</span><span class="stat-value" id="sum-avg"></span><span class="stat-sub">豆購入を除く</span></div>
+            <div class="stat card"><span class="stat-label">1杯あたり平均</span><span class="stat-value" id="sum-avg"></span><span class="stat-sub">豆から淹れた杯は1杯分の単価で計算</span></div>
             <div class="stat card wide"><span class="stat-label">前期間比</span><span class="stat-value" id="sum-diff"></span><span class="stat-sub" id="sum-rate"></span></div>
+          </section>
+
+          <section class="card" id="bags-card" hidden>
+            <h2>開封中の豆</h2>
+            <ul class="bag-list" id="bag-list"></ul>
           </section>
 
           <section class="card">
@@ -254,6 +281,17 @@
           </div>
           <p class="error" id="set-store-error" role="alert" hidden></p>
         </section>
+
+        <section class="card">
+          <h2>豆</h2>
+          <ul class="master-list" id="beans-list"></ul>
+          <div class="row add-row">
+            <label class="visually-hidden" for="set-bean-name">新しい豆の名前</label>
+            <input type="text" id="set-bean-name" placeholder="新しい豆" maxlength="40" />
+            <button type="button" class="btn small" id="set-bean-add">追加</button>
+          </div>
+          <p class="error" id="set-bean-error" role="alert" hidden></p>
+        </section>
       </section>
 
       <!-- ヘルプ -->
@@ -262,7 +300,8 @@
           <h2>種類の分類ルール</h2>
           <ul>
             <li>コンビニコーヒー、自販機のその場抽出・焙煎タイプは、すべて「ドリップ」にします(ラテ系は「ラテ」)。</li>
-            <li>「豆購入」は支出には含めますが、杯数・1杯あたり単価には含めません。</li>
+            <li>「豆購入」は購入日の支出に全額を含めますが、それ自体は杯数に数えません。購入時に豆と予定杯数を入れ、淹れた日にダッシュボードの「開封中の豆」から「+1杯」を押すと、その日に1杯(自宅・ドリップ)として数えます。</li>
+            <li>豆から淹れた1杯の金額は、開封中は「購入金額 ÷ 予定杯数」、「使い切った」を押した後は「購入金額 ÷ 実際の杯数」で計算し、ダッシュボードの「1杯あたり平均」に反映します。</li>
             <li>自宅で淹れた一杯は 0 円で記録すると、杯数だけ数えられます。</li>
           </ul>
         </section>

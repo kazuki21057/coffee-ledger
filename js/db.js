@@ -1,8 +1,8 @@
 // IndexedDB アクセス(外部ライブラリを使わない薄いラッパー)
 
 export const DB_NAME = 'coffee-ledger';
-export const SCHEMA_VERSION = 1;
-export const STORES = ['entries', 'types', 'placeCategories', 'places', 'settings'];
+export const SCHEMA_VERSION = 2;
+export const STORES = ['entries', 'types', 'placeCategories', 'places', 'beans', 'settings'];
 
 /** 初期マスタ(仕様 4.2 / 4.3) */
 export function initialMasters() {
@@ -73,7 +73,12 @@ export function openDB() {
         for (const p of m.places) tx.objectStore('places').put(p);
         for (const s of initialSettings()) tx.objectStore('settings').put(s);
       }
-      // 将来のスキーマ変更はここに ev.oldVersion < 2 … の形で追加し、settings.schemaVersion も更新する
+      // v2(1.4.0): 豆のマスタを追加。記録への beanId/plannedCups/closedAt/bagId の追加は任意項目なので移行不要
+      if (ev.oldVersion < 2) {
+        db.createObjectStore('beans', { keyPath: 'id' });
+        tx.objectStore('settings').put({ key: 'schemaVersion', value: 2 });
+      }
+      // 将来のスキーマ変更はここに ev.oldVersion < 3 … の形で追加し、settings.schemaVersion も更新する
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -154,7 +159,7 @@ export async function setSetting(key, value) {
 
 /** 全データをまとめて読む */
 export async function loadAll() {
-  const [entries, types, placeCategories, places, settingsRows] = await Promise.all(STORES.map((s) => getAll(s)));
+  const [entries, types, placeCategories, places, beans, settingsRows] = await Promise.all(STORES.map((s) => getAll(s)));
   const settings = Object.fromEntries(settingsRows.map((r) => [r.key, r.value]));
-  return { entries, types, placeCategories, places, settings };
+  return { entries, types, placeCategories, places, beans, settings };
 }

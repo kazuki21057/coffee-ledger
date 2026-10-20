@@ -1,10 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { toCSV, parseCSV, parseImport, planImport, csvFilename, CSV_COLUMNS } from '../js/csv.js';
+import { toCSV, parseCSV, parseImport, planImport, csvFilename, CSV_COLUMNS, CSV_COLUMNS_V1 } from '../js/csv.js';
 import { TYPES, CATS, PLACES, entry } from './fixtures.js';
 
 const MASTERS = { types: TYPES, placeCategories: CATS, places: PLACES };
-const HEADER = CSV_COLUMNS.join(',');
+// 既存のテストは旧形式(9 列)の行で書いている。新形式は末尾の「豆の袋の列」で検証する
+const HEADER = CSV_COLUMNS_V1.join(',');
 
 function idGen() {
   let n = 0;
@@ -19,7 +20,7 @@ describe('toCSV', () => {
     );
     assert.ok(csv.startsWith('﻿'));
     const lines = csv.slice(1).split('\r\n');
-    assert.equal(lines[0], HEADER);
+    assert.equal(lines[0], CSV_COLUMNS.join(','));
     assert.match(lines[1], /^a,2026-10-01,120,ドリップ,コンビニ,セブン,,/);
     assert.match(lines[2], /^b,2026-10-02,0,ドリップ,自宅,,,/);
     assert.equal(lines[3], '');
@@ -196,5 +197,39 @@ describe('planImport: id マージとマスタ照合', () => {
         ['cafe', 'セブン'],
       ],
     );
+  });
+});
+
+describe('豆の袋の列(1.4〜)', () => {
+  const BEANS = [{ id: 'b1', name: 'エチオピア', order: 0, archived: false }];
+  test('袋と杯の往復(豆名・予定杯数・使い切り日・袋ID)', () => {
+    const bag = entry('2026-10-01', 'beans', 1600, 'cafe', null, { id: 'bag1', beanId: 'b1', plannedCups: 16, closedAt: '2026-10-20' });
+    const cup = entry('2026-10-02', 'drip', 0, 'home', null, { id: 'cup1', bagId: 'bag1' });
+    const csv = toCSV([bag, cup], { ...MASTERS, beans: BEANS });
+    assert.equal(csv.slice(1).split('\r\n')[0], CSV_COLUMNS.join(','));
+    const plan = planImport(parseImport(csv), [], { ...MASTERS, beans: BEANS }, idGen());
+    const byId = Object.fromEntries(plan.toAdd.map((e) => [e.id, e]));
+    assert.equal(byId.bag1.beanId, 'b1');
+    assert.equal(byId.bag1.plannedCups, 16);
+    assert.equal(byId.bag1.closedAt, '2026-10-20');
+    assert.equal(byId.cup1.bagId, 'bag1');
+    assert.ok(!('beanId' in byId.cup1));
+    assert.deepEqual(plan.newBeans, []);
+  });
+  test('未知の豆名は新規作成、旧形式(9列)のファイルも読める', () => {
+    const t = '2026-10-01T00:00:00.000Z';
+    const csv = [CSV_COLUMNS.join(','), `x,2026-10-01,1200,豆購入,カフェ,,,${t},${t},ケニア,12,,`].join('\r\n');
+    const plan = planImport(parseImport(csv), [], { ...MASTERS, beans: BEANS }, idGen());
+    assert.deepEqual(plan.newBeans.map((b) => b.name), ['ケニア']);
+    assert.equal(plan.toAdd[0].beanId, plan.newBeans[0].id);
+    const old = [CSV_COLUMNS_V1.join(','), `y,2026-10-01,120,ドリップ,自宅,,,${t},${t}`].join('\r\n');
+    const r = parseImport(old);
+    assert.equal(r.fatal, null);
+    assert.equal(r.rows.length, 1);
+  });
+  test('予定杯数・使い切り日の不正はエラー行', () => {
+    const t = '2026-10-01T00:00:00.000Z';
+    const csv = [CSV_COLUMNS.join(','), `a,2026-10-01,1,豆購入,,,,${t},${t},A,0,,`, `b,2026-10-01,1,豆購入,,,,${t},${t},A,3,2026/10/2,`].join('\r\n');
+    assert.deepEqual(parseImport(csv).errors.map((e) => e.line), [2, 3]);
   });
 });

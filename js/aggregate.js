@@ -121,6 +121,8 @@ export function summarize(entries, types, range) {
   let total = 0;
   let cups = 0;
   let cupAmount = 0;
+  // 豆の袋から淹れた杯は、記録上の金額(0 円)ではなく袋の 1 杯あたり単価で平均に入れる
+  const unitCosts = bagUnitCosts(entries);
   let count = 0;
   const byType = new Map();
   const byCat = new Map();
@@ -132,7 +134,7 @@ export function summarize(entries, types, range) {
     total += e.amount;
     if (typeCounts(typeMap, e.typeId)) {
       cups += 1;
-      cupAmount += e.amount;
+      cupAmount += e.bagId && unitCosts.get(e.bagId) != null ? unitCosts.get(e.bagId) : e.amount;
     }
     const t = byType.get(e.typeId) || { typeId: e.typeId, amount: 0, count: 0 };
     t.amount += e.amount;
@@ -171,6 +173,72 @@ export function summarize(entries, types, range) {
     byPlaceCategory: [...byCat.values()].sort(sortByAmountDesc),
     byPlace: byPlaceObj,
   };
+}
+
+// ---- 豆の袋(豆購入の記録 = 1 袋) ----
+
+export const BEANS_TYPE_ID = 'beans';
+
+export function isBeanPurchase(e) {
+  return e.typeId === BEANS_TYPE_ID;
+}
+
+/** 袋ごとの杯数(bagId で紐づく記録の件数) */
+export function bagCupCounts(entries) {
+  const counts = new Map();
+  for (const e of entries) if (e.bagId) counts.set(e.bagId, (counts.get(e.bagId) || 0) + 1);
+  return counts;
+}
+
+/**
+ * 袋の状況。
+ * - 開封中: 1 杯あたり単価 = 購入金額 ÷ 予定杯数(予定)
+ * - 使い切り(closedAt あり): 1 杯あたり単価 = 購入金額 ÷ 実際の杯数(実績)
+ * currentUnit は「今の杯数で割った場合」の参考値(杯数が増えるほど下がる)。
+ */
+export function bagStatus(bag, counts) {
+  const count = counts.get(bag.id) || 0;
+  const planned = bag.plannedCups || 0;
+  const closed = Boolean(bag.closedAt);
+  const plannedUnit = planned > 0 ? bag.amount / planned : null;
+  const currentUnit = count > 0 ? bag.amount / count : null;
+  return { count, planned, closed, plannedUnit, currentUnit, unitCost: closed ? currentUnit : plannedUnit };
+}
+
+/** 袋 ID → 1 杯あたり単価(予定または実績。決まらなければ含めない) */
+export function bagUnitCosts(entries) {
+  const counts = bagCupCounts(entries);
+  const map = new Map();
+  for (const e of entries) {
+    if (!isBeanPurchase(e)) continue;
+    const u = bagStatus(e, counts).unitCost;
+    if (u != null) map.set(e.id, u);
+  }
+  return map;
+}
+
+/** 開封中の袋(予定杯数があり、使い切っていない豆購入)を新しい順に */
+export function openBags(entries) {
+  return entries.filter((e) => isBeanPurchase(e) && !e.closedAt && e.plannedCups > 0).sort(compareRecency);
+}
+
+/** 豆のプルダウンの並び順: 最後に買った日が新しい順 → order 順。非表示は除く */
+export function beanOrder(entries, beans) {
+  const last = new Map();
+  for (const e of entries) {
+    if (!isBeanPurchase(e) || !e.beanId) continue;
+    if (!last.has(e.beanId) || e.date > last.get(e.beanId)) last.set(e.beanId, e.date);
+  }
+  return beans
+    .filter((b) => !b.archived)
+    .sort((a, b) => (last.get(b.id) || '').localeCompare(last.get(a.id) || '') || a.order - b.order);
+}
+
+/** その豆の直近の購入記録(予定杯数・金額の自動入力用) */
+export function lastPurchaseOf(entries, beanId) {
+  let best = null;
+  for (const e of entries) if (isBeanPurchase(e) && e.beanId === beanId && (!best || compareRecency(e, best) < 0)) best = e;
+  return best;
 }
 
 /** 前期間比。前期間が 0 円のときは rate=null(「前期間なし」表示用) */

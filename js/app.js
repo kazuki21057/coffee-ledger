@@ -18,6 +18,13 @@ import {
   compareSeries,
   elapsedDays,
   perDayAmount,
+  BEANS_TYPE_ID,
+  isBeanPurchase,
+  bagCupCounts,
+  bagStatus,
+  openBags,
+  beanOrder,
+  lastPurchaseOf,
   filterEntries,
   groupByDate,
   findByName,
@@ -33,6 +40,7 @@ const state = {
   types: [],
   placeCategories: [],
   places: [],
+  beans: [],
   settings: {},
   view: 'dashboard',
   prevTab: 'dashboard',
@@ -79,6 +87,19 @@ const byOrder = (a, b) => a.order - b.order;
 const typeById = (id) => state.types.find((t) => t.id === id);
 const catById = (id) => state.placeCategories.find((c) => c.id === id);
 const placeById = (id) => state.places.find((p) => p.id === id);
+
+const beanById = (id) => state.beans.find((b) => b.id === id);
+const entryById = (id) => state.entries.find((e) => e.id === id);
+
+function beanName(id) {
+  return beanById(id)?.name ?? '(不明な豆)';
+}
+
+/** 袋の表示名: 「エチオピア(10/1購入)」 */
+function bagLabel(bag) {
+  const [, m, d] = bag.date.split('-').map(Number);
+  return `${bag.beanId ? beanName(bag.beanId) : '豆'}(${m}/${d}購入)`;
+}
 
 function typeName(id) {
   return typeById(id)?.name ?? '(不明な種類)';
@@ -186,6 +207,7 @@ async function refresh() {
   state.types.sort(byOrder);
   state.placeCategories.sort(byOrder);
   state.places.sort(byOrder);
+  state.beans.sort(byOrder);
   renderCurrent();
 }
 
@@ -217,10 +239,20 @@ async function saveEntry(entry, { previous = null, message = '保存しました
   });
 }
 
-function buildEntry({ typeId, placeCategoryId, placeId, amount, note = '', date = today() }) {
+function buildEntry({ typeId, placeCategoryId, placeId, amount, note = '', date = today(), beanId, plannedCups, closedAt, bagId }) {
   const ts = nowIso();
   const cat = catById(placeCategoryId);
+  // 豆の袋の情報: 豆購入には豆・予定杯数・使い切り日、袋から淹れた杯には袋 ID を持たせる
+  const extra = {};
+  if (typeId === BEANS_TYPE_ID) {
+    if (beanId) extra.beanId = beanId;
+    if (plannedCups) extra.plannedCups = plannedCups;
+    if (closedAt) extra.closedAt = closedAt;
+  } else if (bagId) {
+    extra.bagId = bagId;
+  }
   return {
+    ...extra,
     id: newId(),
     date,
     amount,
@@ -245,6 +277,10 @@ const form = {
   storeBeforeAdd: null,
   amountTouched: false,
   dateAuto: true,
+  beanId: null,
+  addingBean: false,
+  beanBeforeAdd: null,
+  plannedTouched: false,
 };
 
 function isActiveCombo(p) {
@@ -261,10 +297,16 @@ function isActiveCombo(p) {
   return true;
 }
 
+/** クイック入力の候補: 豆購入は豆・予定杯数が必要なので除く */
+function isPresetCombo(p) {
+  return p.typeId !== BEANS_TYPE_ID && isActiveCombo(p);
+}
+
 function renderRecord() {
   renderBackupNotice();
   renderPresets();
   renderTypeChips();
+  renderBeanArea();
   renderCatChips();
   renderStoreArea();
   updateSaveState();
@@ -277,7 +319,7 @@ function renderBackupNotice() {
 
 function renderPresets() {
   const box = $('presets');
-  const presets = quickPresets(state.entries, today(), 6, 90, isActiveCombo);
+  const presets = quickPresets(state.entries, today(), 6, 90, isPresetCombo);
   box.replaceChildren(
     ...presets.map((p) => {
       const main = h(
@@ -345,7 +387,9 @@ async function saveSameAsLast() {
   const last = lastCreated(state.entries);
   if (!last) return;
   try {
-    await saveEntry(buildEntry({ ...last, date: today() }));
+    // 豆購入なら新しい袋として作る(使い切り日は引き継がない)。袋から淹れた杯は、袋が開封中のときだけ紐づける
+    const bag = last.bagId ? entryById(last.bagId) : null;
+    await saveEntry(buildEntry({ ...last, date: today(), closedAt: null, bagId: bag && !bag.closedAt ? bag.id : null }));
   } catch (err) {
     console.error(err);
     showToast('保存に失敗しました');
@@ -365,6 +409,7 @@ function renderTypeChips() {
           onclick: () => {
             form.typeId = t.id;
             renderTypeChips();
+            renderBeanArea({ focusInput: true });
             autoFillAmount();
             updateSaveState();
           },
@@ -532,8 +577,11 @@ function readForm() {
   const amountStr = $('amount').value;
   const date = $('date').value;
   const note = $('note').value;
-  const valid = Boolean(form.typeId) && /^\d+$/.test(amountStr) && isValidDate(date) && [...note].length <= 100;
-  return { valid, amount: Number(amountStr), date, note };
+  const plannedStr = $('planned-cups').value;
+  const isBeans = form.typeId === BEANS_TYPE_ID;
+  const beansOk = !isBeans || (Boolean(form.beanId) && /^[1-9]\d*$/.test(plannedStr));
+  const valid = Boolean(form.typeId) && /^\d+$/.test(amountStr) && isValidDate(date) && [...note].length <= 100 && beansOk;
+  return { valid, amount: Number(amountStr), date, note, plannedCups: isBeans ? Number(plannedStr) : null };
 }
 
 function updateSaveState() {
@@ -550,8 +598,16 @@ function resetForm() {
     addingStore: false,
     storeBeforeAdd: null,
     amountTouched: false,
+    beanId: null,
+    addingBean: false,
+    beanBeforeAdd: null,
+    plannedTouched: false,
   });
   $('amount').value = '';
+  $('planned-cups').value = '';
+  $('bean-closed').checked = false;
+  $('bean-new-name').value = '';
+  $('bean-error').hidden = true;
   $('note').value = '';
   $('note-details').open = false;
   $('store-new-name').value = '';
@@ -560,6 +616,7 @@ function resetForm() {
   $('save-btn').textContent = '保存';
   setDate(today(), true);
   renderTypeChips();
+  renderBeanArea();
   renderCatChips();
   renderStoreArea();
   updateSaveState();
@@ -592,14 +649,19 @@ export function editEntry(entry, returnTo = 'history') {
     placeCategoryId: entry.placeCategoryId,
     placeId: entry.placeId,
     amountTouched: true,
+    beanId: entry.beanId || null,
+    plannedTouched: true,
   });
   $('amount').value = String(entry.amount);
+  $('planned-cups').value = entry.plannedCups ? String(entry.plannedCups) : '';
+  $('bean-closed').checked = Boolean(entry.closedAt);
   $('note').value = entry.note || '';
   $('note-details').open = Boolean(entry.note);
   setDate(entry.date);
   $('edit-banner').hidden = false;
   $('save-btn').textContent = '変更を保存';
   renderTypeChips();
+  renderBeanArea();
   renderCatChips();
   renderStoreArea();
   updateSaveState();
@@ -608,9 +670,21 @@ export function editEntry(entry, returnTo = 'history') {
 
 async function submitForm(ev) {
   ev.preventDefault();
-  const { valid, amount, date, note } = readForm();
+  const { valid, amount, date, note, plannedCups } = readForm();
   if (!valid) return;
-  const fields = { typeId: form.typeId, placeCategoryId: form.placeCategoryId, placeId: form.placeId, amount, note, date };
+  const closedAt = form.editing && $('bean-closed').checked ? form.editing.closedAt || today() : null;
+  const fields = {
+    typeId: form.typeId,
+    placeCategoryId: form.placeCategoryId,
+    placeId: form.placeId,
+    amount,
+    note,
+    date,
+    beanId: form.beanId,
+    plannedCups,
+    closedAt,
+    bagId: form.editing?.bagId ?? null,
+  };
   const returnTo = form.returnTo;
   try {
     if (form.editing) {
@@ -648,6 +722,22 @@ function setupRecord() {
       addStore();
     }
   });
+  $('bean-select').addEventListener('change', onBeanSelectChange);
+  $('bean-add-btn').addEventListener('click', addBean);
+  $('bean-cancel-btn').addEventListener('click', cancelBeanAdd);
+  $('bean-new-name').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.isComposing) {
+      ev.preventDefault();
+      addBean();
+    }
+  });
+  $('planned-cups').addEventListener('input', () => {
+    const input = $('planned-cups');
+    const cleaned = input.value.normalize('NFKC').replace(/[^\d]/g, '').slice(0, 3);
+    if (cleaned !== input.value) input.value = cleaned;
+    form.plannedTouched = cleaned !== '';
+    updateSaveState();
+  });
   $('same-as-last').addEventListener('click', saveSameAsLast);
   $('edit-cancel').addEventListener('click', () => {
     const back = form.returnTo;
@@ -656,6 +746,101 @@ function setupRecord() {
   });
   $('backup-notice-open').addEventListener('click', () => showView('settings'));
   setDate(today(), true);
+}
+
+// ---- 豆(豆購入のときだけ表示。店のプルダウンと同じ方式) ----
+
+function renderBeanArea({ focusInput = false } = {}) {
+  const isBeans = form.typeId === BEANS_TYPE_ID;
+  $('bean-fieldset').hidden = !isBeans;
+  if (!isBeans) return;
+  const beans = beanOrder(state.entries, state.beans);
+  const current = form.beanId ? beanById(form.beanId) : null;
+  const options = [h('option', { value: '' }, '豆を選択'), ...beans.map((b) => h('option', { value: b.id }, b.name))];
+  if (current && !beans.includes(current)) options.push(h('option', { value: current.id }, `${current.name}(非表示)`));
+  options.push(h('option', { value: '__new__' }, '＋ 新しく追加…'));
+  const select = $('bean-select');
+  select.replaceChildren(...options);
+  const noBeans = beans.length === 0 && !current;
+  const showAdd = form.addingBean || noBeans;
+  select.hidden = noBeans;
+  select.value = form.addingBean && !form.beanId ? '__new__' : form.beanId || '';
+  $('bean-add').hidden = !showAdd;
+  $('bean-cancel-btn').hidden = noBeans;
+  // 「使い切った」は登録済みの豆購入を編集するときだけ
+  $('bean-closed-wrap').hidden = !(form.editing && isBeanPurchase(form.editing));
+  if (showAdd && focusInput) $('bean-new-name').focus();
+  updateSaveState();
+}
+
+/** 豆を選んだら、前回その豆を買ったときの予定杯数・金額を入れる(手入力済みなら上書きしない) */
+function autoFillFromBean() {
+  const last = form.beanId ? lastPurchaseOf(state.entries, form.beanId) : null;
+  if (!last) return;
+  if (!form.plannedTouched && last.plannedCups) $('planned-cups').value = String(last.plannedCups);
+  if (!form.amountTouched) $('amount').value = String(last.amount);
+  updateSaveState();
+}
+
+function onBeanSelectChange() {
+  const v = $('bean-select').value;
+  $('bean-error').hidden = true;
+  if (v === '__new__') {
+    form.beanBeforeAdd = form.beanId;
+    form.beanId = null;
+    form.addingBean = true;
+    $('bean-new-name').value = '';
+    renderBeanArea({ focusInput: true });
+    return;
+  }
+  form.addingBean = false;
+  form.beanId = v || null;
+  renderBeanArea();
+  autoFillFromBean();
+}
+
+function cancelBeanAdd() {
+  form.addingBean = false;
+  form.beanId = form.beanBeforeAdd;
+  $('bean-new-name').value = '';
+  $('bean-error').hidden = true;
+  renderBeanArea();
+}
+
+async function addBean() {
+  const name = normalizeName($('bean-new-name').value);
+  const err = $('bean-error');
+  const fail = (msg) => {
+    err.textContent = msg;
+    err.hidden = false;
+  };
+  if (!name) {
+    fail('豆の名前を入力してください');
+    $('bean-new-name').focus();
+    return;
+  }
+  const dup = findByName(state.beans, name);
+  if (dup) {
+    form.beanId = dup.id;
+    renderBeanArea();
+    fail(`「${dup.name}」はすでに登録されています。既存の豆を選択しました。`);
+    autoFillFromBean();
+    return;
+  }
+  const bean = { id: newId(), name, order: state.beans.reduce((m, b) => Math.max(m, b.order), -1) + 1, archived: false };
+  try {
+    await db.put('beans', bean);
+    state.beans.push(bean);
+    form.beanId = bean.id;
+    form.addingBean = false;
+    $('bean-new-name').value = '';
+    err.hidden = true;
+    renderBeanArea();
+    showToast(`「${name}」を追加しました`, null, 2500);
+  } catch (e) {
+    console.error(e);
+    fail('豆を追加できませんでした');
+  }
 }
 
 renderers.record = renderRecord;
@@ -747,6 +932,7 @@ function renderDashboard() {
   const chartsOk = charts.isChartAvailable();
   $('chart-error').hidden = chartsOk;
 
+  renderBags();
   renderTypeBreakdown(cur, chartsOk);
   renderPlaceBreakdown(cur, chartsOk);
   renderSeries(g, anchor, ws, chartsOk);
@@ -820,6 +1006,61 @@ function renderPlaceBreakdown(cur, chartsOk) {
     charts.renderHorizontalBars($('chart-place'), items, (idx) => {
       if (!drill && items[idx]?.clickable) drillInto(items[idx].catId);
     });
+  }
+}
+
+// ---- 開封中の豆(+1杯・使い切り) ----
+
+function renderBags() {
+  const bags = openBags(state.entries);
+  $('bags-card').hidden = bags.length === 0;
+  if (bags.length === 0) return;
+  const counts = bagCupCounts(state.entries);
+  $('bag-list').replaceChildren(
+    ...bags.map((bag) => {
+      const s = bagStatus(bag, counts);
+      const label = bagLabel(bag);
+      return h(
+        'li',
+        { class: 'bag' },
+        h(
+          'div',
+          { class: 'bag-info' },
+          h('strong', {}, label),
+          h('span', { class: 'bag-sub' }, `${s.count}杯 / 予定${s.planned}杯・1杯 ${yen(s.plannedUnit)}(予定)`),
+          s.count > 0 ? h('span', { class: 'bag-sub' }, `今の杯数で割ると1杯 ${yen(s.currentUnit)}`) : null,
+        ),
+        h(
+          'div',
+          { class: 'bag-actions' },
+          h('button', { type: 'button', class: 'btn small', 'aria-label': `${label}を1杯記録`, onclick: () => addBagCup(bag) }, '+1杯'),
+          h('button', { type: 'button', class: 'btn small secondary', 'aria-label': `${label}を使い切りにする`, onclick: () => closeBag(bag, s) }, '使い切った'),
+        ),
+      );
+    }),
+  );
+}
+
+/** 袋から 1 杯淹れた記録(今日・自宅・ドリップ・0 円。金額は袋の単価で集計する) */
+async function addBagCup(bag) {
+  try {
+    const cup = buildEntry({ typeId: 'drip', placeCategoryId: 'home', placeId: null, amount: 0, date: today(), bagId: bag.id });
+    await saveEntry(cup, { message: `${bagLabel(bag)}を1杯記録しました` });
+  } catch (err) {
+    console.error(err);
+    showToast('保存に失敗しました');
+  }
+}
+
+async function closeBag(bag, s) {
+  const detail = s.count > 0 ? `${s.count}杯 → 1杯あたり ${yen(s.currentUnit)}(実績)` : 'まだ1杯も記録していないため、1杯あたりの金額は計算されません';
+  if (!window.confirm(`「${bagLabel(bag)}」を使い切りにしますか?\n${detail}`)) return;
+  try {
+    const closed = { ...bag, closedAt: today(), updatedAt: nowIso() };
+    await saveEntry(closed, { previous: bag, message: '使い切りにしました' });
+  } catch (err) {
+    console.error(err);
+    showToast('保存に失敗しました');
   }
 }
 
@@ -971,7 +1212,7 @@ function historyItem(e) {
     { type: 'button', class: 'item-main', 'aria-label': `${entrySummary(e)} を編集` },
     h('span', { class: 'item-type' }, typeName(e.typeId)),
     h('span', { class: 'item-amount' }, yen(e.amount)),
-    h('span', { class: 'item-sub' }, placeLabel(e.placeCategoryId, e.placeId), e.note ? `・${e.note}` : ''),
+    h('span', { class: 'item-sub' }, placeLabel(e.placeCategoryId, e.placeId), bagNote(e), e.note ? `・${e.note}` : ''),
   );
   const li = h(
     'li',
@@ -981,6 +1222,25 @@ function historyItem(e) {
   );
   attachSwipe(li, main, () => editEntry(e, 'history'), () => confirmDelete(e));
   return li;
+}
+
+/** 履歴に添える豆の情報: 袋なら杯数と単価、袋から淹れた杯なら豆名と単価 */
+function bagNote(e) {
+  const counts = bagCupCounts(state.entries);
+  if (isBeanPurchase(e) && e.plannedCups) {
+    const s = bagStatus(e, counts);
+    const name = e.beanId ? beanName(e.beanId) : '豆';
+    return s.closed
+      ? `・${name} 使い切り ${s.count}杯${s.unitCost != null ? `・1杯 ${yen(s.unitCost)}` : ''}`
+      : `・${name} ${s.count}/${s.planned}杯`;
+  }
+  if (e.bagId) {
+    const bag = entryById(e.bagId);
+    if (!bag) return '・豆(袋の記録なし)';
+    const s = bagStatus(bag, counts);
+    return `・豆: ${bag.beanId ? beanName(bag.beanId) : '豆'}${s.unitCost != null ? `(1杯 ${yen(s.unitCost)}${s.closed ? '' : ' 予定'})` : ''}`;
+  }
+  return '';
 }
 
 /** 左スワイプで削除、タップで編集 */
@@ -1026,7 +1286,9 @@ function attachSwipe(li, main, onTap, onSwipe) {
 }
 
 async function confirmDelete(e) {
-  if (!window.confirm(`この記録を削除しますか?\n${e.date} ${entrySummary(e)}`)) return;
+  const cups = isBeanPurchase(e) ? state.entries.filter((x) => x.bagId === e.id).length : 0;
+  const warn = cups > 0 ? `\nこの袋から淹れた${cups}杯の記録は残りますが、1杯あたりの金額は0円として扱われます。` : '';
+  if (!window.confirm(`この記録を削除しますか?\n${e.date} ${entrySummary(e)}${warn}`)) return;
   try {
     await db.deleteEntry(e.id);
     showToast('削除しました', {
@@ -1091,6 +1353,7 @@ function renderSettings() {
     h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: c.hasStores, onchange: (ev) => saveMaster('placeCategories', { ...c, hasStores: ev.target.checked }) }), '店を持つ'),
   ]);
   renderStores();
+  renderMasterList('beans-list', state.beans, 'beans', () => []);
 }
 
 /** 種類・区分・店の 1 行(名前変更・並べ替え・非表示) */
@@ -1100,7 +1363,7 @@ function masterRow(item, list, store, extra) {
     type: 'text',
     class: 'name-input',
     value: item.name,
-    maxlength: store === 'places' ? '40' : '20',
+    maxlength: store === 'places' || store === 'beans' ? '40' : '20',
     'aria-label': `${item.name}の名前`,
     onchange: (ev) => renameMaster(store, item, ev.target),
   });
@@ -1172,7 +1435,8 @@ async function saveMaster(store, item) {
 }
 
 function duplicateOf(store, item, name, categoryId = item?.categoryId) {
-  const others = (store === 'types' ? state.types : store === 'placeCategories' ? state.placeCategories : state.places).filter(
+  const lists = { types: state.types, placeCategories: state.placeCategories, places: state.places, beans: state.beans };
+  const others = lists[store].filter(
     (x) => x.id !== item?.id,
   );
   return store === 'places' ? findPlaceByName(others, categoryId, name) : findByName(others, name);
@@ -1301,6 +1565,7 @@ async function onImportFile(ev) {
       ...plan.newTypes.map((t) => `種類「${t.name}」`),
       ...plan.newPlaceCategories.map((c) => `区分「${c.name}」`),
       ...plan.newPlaces.map((p) => `店「${p.name}」`),
+      ...plan.newBeans.map((b) => `豆「${b.name}」`),
     ];
     const canApply = plan.toAdd.length + plan.toUpdate.length > 0;
     box.replaceChildren(
@@ -1345,6 +1610,7 @@ async function applyImport() {
       types: plan.newTypes,
       placeCategories: plan.newPlaceCategories,
       places: plan.newPlaces,
+      beans: plan.newBeans,
       entries: [...plan.toAdd, ...plan.toUpdate],
     });
     cancelImport();
@@ -1393,6 +1659,10 @@ function setupSettings() {
   onEnter('type-new', addType);
   onEnter('cat-new', addCat);
   onEnter('set-store-name', addPlace);
+  const addBeanMaster = () =>
+    addMaster('beans', 'set-bean-name', 'set-bean-error', (name) => ({ id: newId(), name, order: nextOrderOf(state.beans), archived: false }));
+  $('set-bean-add').addEventListener('click', addBeanMaster);
+  onEnter('set-bean-name', addBeanMaster);
 }
 
 renderers.settings = renderSettings;
