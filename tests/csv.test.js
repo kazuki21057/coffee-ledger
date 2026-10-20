@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { toCSV, parseCSV, parseImport, planImport, csvFilename, CSV_COLUMNS, CSV_COLUMNS_V1 } from '../js/csv.js';
+import { toCSV, parseCSV, parseImport, planImport, csvFilename, CSV_COLUMNS, CSV_COLUMNS_V1, CSV_COLUMNS_V2 } from '../js/csv.js';
 import { TYPES, CATS, PLACES, entry } from './fixtures.js';
 
 const MASTERS = { types: TYPES, placeCategories: CATS, places: PLACES };
@@ -218,7 +218,7 @@ describe('豆の袋の列(1.4〜)', () => {
   });
   test('未知の豆名は新規作成、旧形式(9列)のファイルも読める', () => {
     const t = '2026-10-01T00:00:00.000Z';
-    const csv = [CSV_COLUMNS.join(','), `x,2026-10-01,1200,豆購入,カフェ,,,${t},${t},ケニア,12,,`].join('\r\n');
+    const csv = [CSV_COLUMNS_V2.join(','), `x,2026-10-01,1200,豆購入,カフェ,,,${t},${t},ケニア,12,,`].join('\r\n');
     const plan = planImport(parseImport(csv), [], { ...MASTERS, beans: BEANS }, idGen());
     assert.deepEqual(plan.newBeans.map((b) => b.name), ['ケニア']);
     assert.equal(plan.toAdd[0].beanId, plan.newBeans[0].id);
@@ -229,7 +229,20 @@ describe('豆の袋の列(1.4〜)', () => {
   });
   test('予定杯数・使い切り日の不正はエラー行', () => {
     const t = '2026-10-01T00:00:00.000Z';
-    const csv = [CSV_COLUMNS.join(','), `a,2026-10-01,1,豆購入,,,,${t},${t},A,0,,`, `b,2026-10-01,1,豆購入,,,,${t},${t},A,3,2026/10/2,`].join('\r\n');
+    const csv = [CSV_COLUMNS_V2.join(','), `a,2026-10-01,1,豆購入,,,,${t},${t},A,0,,`, `b,2026-10-01,1,豆購入,,,,${t},${t},A,3,2026/10/2,`].join('\r\n');
     assert.deepEqual(parseImport(csv).errors.map((e) => e.line), [2, 3]);
+  });
+});
+
+describe('購入量・1回の量の列(1.5〜)', () => {
+  test('往復で一致し、数値でない値はエラー行', () => {
+    const bag = entry('2026-10-01', 'beans', 1600, null, null, { id: 'g1', beanId: 'b1', plannedCups: 6, grams: 100, gramsPerCup: 15.5 });
+    const csv = toCSV([bag], { ...MASTERS, beans: [{ id: 'b1', name: 'A', order: 0, archived: false }] });
+    const plan = planImport(parseImport(csv), [], { ...MASTERS, beans: [{ id: 'b1', name: 'A', order: 0, archived: false }] }, idGen());
+    assert.equal(plan.toAdd[0].grams, 100);
+    assert.equal(plan.toAdd[0].gramsPerCup, 15.5);
+    const t = '2026-10-01T00:00:00.000Z';
+    const bad = [CSV_COLUMNS.join(','), `z,2026-10-01,1,豆購入,,,,${t},${t},A,6,,,百,15`].join('\r\n');
+    assert.equal(parseImport(bad).errors.length, 1);
   });
 });

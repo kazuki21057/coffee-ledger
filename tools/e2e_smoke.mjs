@@ -140,6 +140,11 @@ try {
   await p.fill('#bean-new-name', 'テスト豆');
   await p.press('#bean-new-name', 'Enter');
   await p.waitForTimeout(150);
+  await p.fill('#bean-grams', '100');
+  await p.dispatchEvent('#bean-grams', 'input');
+  await p.fill('#bean-grams-per-cup', '15');
+  await p.dispatchEvent('#bean-grams-per-cup', 'input');
+  check('購入量÷1回の量で予定杯数(切り捨て)', (await p.inputValue('#planned-cups')) === '6', await p.textContent('#grams-result'));
   await p.fill('#planned-cups', '10');
   await p.dispatchEvent('#planned-cups', 'input');
   await p.fill('#amount', '1000');

@@ -25,6 +25,7 @@ import {
   openBags,
   beanOrder,
   lastPurchaseOf,
+  cupsFromGrams,
   filterEntries,
   groupByDate,
   findByName,
@@ -239,7 +240,7 @@ async function saveEntry(entry, { previous = null, message = '保存しました
   });
 }
 
-function buildEntry({ typeId, placeCategoryId, placeId, amount, note = '', date = today(), beanId, plannedCups, closedAt, bagId }) {
+function buildEntry({ typeId, placeCategoryId, placeId, amount, note = '', date = today(), beanId, plannedCups, closedAt, bagId, grams, gramsPerCup }) {
   const ts = nowIso();
   const cat = catById(placeCategoryId);
   // 豆の袋の情報: 豆購入には豆・予定杯数・使い切り日、袋から淹れた杯には袋 ID を持たせる
@@ -248,6 +249,8 @@ function buildEntry({ typeId, placeCategoryId, placeId, amount, note = '', date 
     if (beanId) extra.beanId = beanId;
     if (plannedCups) extra.plannedCups = plannedCups;
     if (closedAt) extra.closedAt = closedAt;
+    if (grams > 0) extra.grams = grams;
+    if (gramsPerCup > 0) extra.gramsPerCup = gramsPerCup;
   } else if (bagId) {
     extra.bagId = bagId;
   }
@@ -581,7 +584,52 @@ function readForm() {
   const isBeans = form.typeId === BEANS_TYPE_ID;
   const beansOk = !isBeans || (Boolean(form.beanId) && /^[1-9]\d*$/.test(plannedStr));
   const valid = Boolean(form.typeId) && /^\d+$/.test(amountStr) && isValidDate(date) && [...note].length <= 100 && beansOk;
-  return { valid, amount: Number(amountStr), date, note, plannedCups: isBeans ? Number(plannedStr) : null };
+  const g = readGrams();
+  return {
+    valid,
+    amount: Number(amountStr),
+    date,
+    note,
+    plannedCups: isBeans ? Number(plannedStr) : null,
+    grams: isBeans ? g.grams : null,
+    gramsPerCup: isBeans ? g.perCup : null,
+  };
+}
+
+const GRAM_RE = /^\d+(\.\d+)?$/;
+const GRAMS_HINT = '購入量と1回に使う量を入れると予定杯数を計算します(小数点以下切り捨て)。';
+
+function readGrams() {
+  const gs = $('bean-grams').value;
+  const ps = $('bean-grams-per-cup').value;
+  return { grams: GRAM_RE.test(gs) ? Number(gs) : null, perCup: GRAM_RE.test(ps) ? Number(ps) : null };
+}
+
+/** 購入量 ÷ 1 回の量 から予定杯数を入れる(小数点以下切り捨て) */
+function applyGrams() {
+  const { grams, perCup } = readGrams();
+  const out = $('grams-result');
+  const n = cupsFromGrams(grams, perCup);
+  out.classList.remove('error');
+  if (n === null) {
+    out.textContent = GRAMS_HINT;
+  } else if (n < 1) {
+    out.textContent = '1回に使う量が購入量より多いため計算できません。';
+    out.classList.add('error');
+  } else {
+    out.textContent = `${grams}g ÷ ${perCup}g = ${n}杯(小数点以下切り捨て)`;
+    $('planned-cups').value = String(n);
+    form.plannedTouched = true;
+  }
+  updateSaveState();
+}
+
+/** 数字と小数点 1 つだけ残す(全角は半角にする) */
+function sanitizeGrams(input) {
+  let v = input.value.normalize('NFKC').replace(/[^\d.]/g, '');
+  const i = v.indexOf('.');
+  if (i >= 0) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/\./g, '');
+  if (v !== input.value) input.value = v;
 }
 
 function updateSaveState() {
@@ -605,6 +653,10 @@ function resetForm() {
   });
   $('amount').value = '';
   $('planned-cups').value = '';
+  $('bean-grams').value = '';
+  $('bean-grams-per-cup').value = '';
+  $('grams-result').textContent = GRAMS_HINT;
+  $('grams-result').classList.remove('error');
   $('bean-closed').checked = false;
   $('bean-new-name').value = '';
   $('bean-error').hidden = true;
@@ -654,6 +706,8 @@ export function editEntry(entry, returnTo = 'history') {
   });
   $('amount').value = String(entry.amount);
   $('planned-cups').value = entry.plannedCups ? String(entry.plannedCups) : '';
+  $('bean-grams').value = entry.grams ? String(entry.grams) : '';
+  $('bean-grams-per-cup').value = entry.gramsPerCup ? String(entry.gramsPerCup) : '';
   $('bean-closed').checked = Boolean(entry.closedAt);
   $('note').value = entry.note || '';
   $('note-details').open = Boolean(entry.note);
@@ -670,7 +724,7 @@ export function editEntry(entry, returnTo = 'history') {
 
 async function submitForm(ev) {
   ev.preventDefault();
-  const { valid, amount, date, note, plannedCups } = readForm();
+  const { valid, amount, date, note, plannedCups, grams, gramsPerCup } = readForm();
   if (!valid) return;
   const closedAt = form.editing && $('bean-closed').checked ? form.editing.closedAt || today() : null;
   const fields = {
@@ -682,6 +736,8 @@ async function submitForm(ev) {
     date,
     beanId: form.beanId,
     plannedCups,
+    grams,
+    gramsPerCup,
     closedAt,
     bagId: form.editing?.bagId ?? null,
   };
@@ -736,8 +792,17 @@ function setupRecord() {
     const cleaned = input.value.normalize('NFKC').replace(/[^\d]/g, '').slice(0, 3);
     if (cleaned !== input.value) input.value = cleaned;
     form.plannedTouched = cleaned !== '';
+    const { grams, perCup } = readGrams();
+    const n = cupsFromGrams(grams, perCup);
+    if (n !== null && n >= 1 && Number(cleaned) !== n) $('grams-result').textContent = `予定杯数を手入力しています(購入量からの計算では${n}杯)`;
     updateSaveState();
   });
+  for (const id of ['bean-grams', 'bean-grams-per-cup']) {
+    $(id).addEventListener('input', () => {
+      sanitizeGrams($(id));
+      applyGrams();
+    });
+  }
   $('same-as-last').addEventListener('click', saveSameAsLast);
   $('edit-cancel').addEventListener('click', () => {
     const back = form.returnTo;
@@ -777,7 +842,14 @@ function renderBeanArea({ focusInput = false } = {}) {
 function autoFillFromBean() {
   const last = form.beanId ? lastPurchaseOf(state.entries, form.beanId) : null;
   if (!last) return;
-  if (!form.plannedTouched && last.plannedCups) $('planned-cups').value = String(last.plannedCups);
+  if (!form.plannedTouched) {
+    // 前回の購入量・1 回の量を引き継ぐ。予定杯数は前回の値(購入量から計算できればその値)
+    if (last.grams) $('bean-grams').value = String(last.grams);
+    if (last.gramsPerCup) $('bean-grams-per-cup').value = String(last.gramsPerCup);
+    if (last.plannedCups) $('planned-cups').value = String(last.plannedCups);
+    if (last.grams && last.gramsPerCup) applyGrams();
+    form.plannedTouched = false;
+  }
   if (!form.amountTouched) $('amount').value = String(last.amount);
   updateSaveState();
 }

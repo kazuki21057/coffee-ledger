@@ -4,7 +4,9 @@ import { isValidDate, normalizeName, findByName, findPlaceByName, compareRecency
 
 // 1.0〜1.3 の 9 列(読み込みのみ対応)と、豆の袋の情報を末尾に足した 13 列(1.4〜)
 export const CSV_COLUMNS_V1 = ['id', 'date', 'amount', 'type', 'placeCategory', 'place', 'note', 'createdAt', 'updatedAt'];
-export const CSV_COLUMNS = [...CSV_COLUMNS_V1, 'bean', 'plannedCups', 'closedAt', 'bagId'];
+export const CSV_COLUMNS_V2 = [...CSV_COLUMNS_V1, 'bean', 'plannedCups', 'closedAt', 'bagId'];
+// 1.5〜: 購入量(g)・1 回の量(g)を追加
+export const CSV_COLUMNS = [...CSV_COLUMNS_V2, 'grams', 'gramsPerCup'];
 const BOM = '﻿';
 const NOTE_MAX = 100;
 
@@ -37,6 +39,8 @@ export function toCSV(entries, { types, placeCategories, places, beans = [] }) {
         e.plannedCups ?? '',
         e.closedAt ?? '',
         e.bagId ?? '',
+        e.grams ?? '',
+        e.gramsPerCup ?? '',
       ]
         .map(escapeField)
         .join(','),
@@ -114,7 +118,7 @@ export function parseImport(text) {
   const errors = [];
   if (records.length === 0) return { rows: [], errors, fatal: 'ファイルが空です' };
   const header = records[0].fields.map((h) => h.trim());
-  const columns = [CSV_COLUMNS, CSV_COLUMNS_V1].find((c) => header.join(',') === c.join(','));
+  const columns = [CSV_COLUMNS, CSV_COLUMNS_V2, CSV_COLUMNS_V1].find((c) => header.join(',') === c.join(','));
   if (!columns) {
     return { rows: [], errors, fatal: `見出し行が不正です(期待: ${CSV_COLUMNS.join(',')})` };
   }
@@ -124,7 +128,7 @@ export function parseImport(text) {
       errors.push({ line, message: `列数が不正です(${fields.length} 列)` });
       continue;
     }
-    const [id, date, amount, type, placeCategory, place, note, createdAt, updatedAt, bean = '', planned = '', closedAt = '', bagId = ''] = fields;
+    const [id, date, amount, type, placeCategory, place, note, createdAt, updatedAt, bean = '', planned = '', closedAt = '', bagId = '', grams = '', gramsPerCup = ''] = fields;
     const amountStr = amount.trim();
     let message = null;
     if (id.trim() === '') message = 'id が空です';
@@ -136,6 +140,7 @@ export function parseImport(text) {
     else if (!isValidIso(createdAt) || !isValidIso(updatedAt)) message = '作成日時・更新日時の形式が不正です';
     else if (planned.trim() !== '' && !/^[1-9]\d*$/.test(planned.trim())) message = `予定杯数は 1 以上の整数で入力してください(${planned})`;
     else if (closedAt.trim() !== '' && !isValidDate(closedAt.trim())) message = `使い切り日の形式が不正です(${closedAt})`;
+    else if ([grams, gramsPerCup].some((g) => g.trim() !== '' && !/^\d+(\.\d+)?$/.test(g.trim()))) message = `購入量・1回の量は数値(g)で入力してください(${grams}/${gramsPerCup})`;
     if (message) {
       errors.push({ line, message });
       continue;
@@ -154,6 +159,8 @@ export function parseImport(text) {
       bean: normalizeName(bean),
       plannedCups: planned.trim() === '' ? null : Number(planned.trim()),
       closedAt: closedAt.trim() || null,
+      grams: grams.trim() === '' ? null : Number(grams.trim()),
+      gramsPerCup: gramsPerCup.trim() === '' ? null : Number(gramsPerCup.trim()),
       bagId: bagId.trim() || null,
     });
   }
@@ -272,6 +279,8 @@ export function planImport(parsed, existingEntries, masters, genId) {
     if (r.plannedCups != null) entry.plannedCups = r.plannedCups;
     if (r.closedAt) entry.closedAt = r.closedAt;
     if (r.bagId) entry.bagId = r.bagId;
+    if (r.grams != null) entry.grams = r.grams;
+    if (r.gramsPerCup != null) entry.gramsPerCup = r.gramsPerCup;
     (cur ? toUpdate : toAdd).push(entry);
   }
   return { toAdd, toUpdate, unchanged, newTypes, newPlaceCategories: newCats, newPlaces, newBeans };

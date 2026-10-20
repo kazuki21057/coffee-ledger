@@ -217,6 +217,16 @@ export function bagUnitCosts(entries) {
   return map;
 }
 
+/**
+ * 購入量(g)と 1 回に使う量(g)から予定杯数を出す(小数点以下切り捨て)。
+ * 例: 100g ÷ 15g = 6.66… → 6 杯。どちらかが 0 以下・数値でなければ null。
+ */
+export function cupsFromGrams(grams, gramsPerCup) {
+  if (!(grams > 0) || !(gramsPerCup > 0)) return null;
+  // 浮動小数の誤差(例 0.3 ÷ 0.1 = 2.999…)で 1 杯少なくならないよう微小値を足す
+  return Math.floor(grams / gramsPerCup + 1e-9);
+}
+
 /** 開封中の袋(予定杯数があり、使い切っていない豆購入)を新しい順に */
 export function openBags(entries) {
   return entries.filter((e) => isBeanPurchase(e) && !e.closedAt && e.plannedCups > 0).sort(compareRecency);

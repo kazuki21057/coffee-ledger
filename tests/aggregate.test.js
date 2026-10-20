@@ -23,6 +23,7 @@ import {
   openBags,
   beanOrder,
   lastPurchaseOf,
+  cupsFromGrams,
 } from '../js/aggregate.js';
 import { TYPES, PLACES, entry } from './fixtures.js';
 
@@ -424,5 +425,23 @@ describe('豆の袋(予定杯数・使い切り・1杯あたり単価)', () => {
     );
     assert.equal(lastPurchaseOf(es, 'b2').plannedCups, 12);
     assert.equal(lastPurchaseOf(es, 'b3'), null);
+  });
+});
+
+describe('購入量(g)と1回の量(g)から予定杯数', () => {
+  test('小数点以下は切り捨て', () => {
+    assert.equal(cupsFromGrams(100, 15), 6);
+    assert.equal(cupsFromGrams(200, 12), 16);
+    assert.equal(cupsFromGrams(100, 12.5), 8);
+    assert.equal(cupsFromGrams(90, 15), 6);
+  });
+  test('浮動小数の誤差で1杯少なくならない', () => {
+    assert.equal(cupsFromGrams(0.3, 0.1), 3);
+  });
+  test('1回の量が購入量より多いと0、入力不足はnull', () => {
+    assert.equal(cupsFromGrams(10, 15), 0);
+    assert.equal(cupsFromGrams(0, 15), null);
+    assert.equal(cupsFromGrams(100, 0), null);
+    assert.equal(cupsFromGrams(NaN, 15), null);
   });
 });

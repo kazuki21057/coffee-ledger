@@ -658,6 +658,30 @@ details > summary {
   margin-top: 10px;
 }
 
+.grams-row {
+  margin-top: 6px;
+  gap: 6px;
+}
+
+.grams-row input {
+  width: 5.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.grams-lead {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+#grams-result {
+  margin: 4px 0 0;
+}
+
+#grams-result.error {
+  color: var(--danger);
+}
+
 .planned-row input {
   width: 6em;
   text-align: right;

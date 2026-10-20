@@ -74,9 +74,19 @@
             </div>
             <div class="row planned-row">
               <label for="planned-cups">予定杯数 <span class="req">必須</span></label>
-              <input type="text" id="planned-cups" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="例: 15" />
+              <input type="text" id="planned-cups" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="例: 6" />
               <span>杯分</span>
             </div>
+            <div class="row grams-row">
+              <span class="grams-lead">または</span>
+              <label class="visually-hidden" for="bean-grams">購入量(g)</label>
+              <input type="text" id="bean-grams" inputmode="decimal" maxlength="6" autocomplete="off" placeholder="購入量" />
+              <span>g ÷ 1回</span>
+              <label class="visually-hidden" for="bean-grams-per-cup">1回に使う量(g)</label>
+              <input type="text" id="bean-grams-per-cup" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="量" />
+              <span>g</span>
+            </div>
+            <p class="hint" id="grams-result" aria-live="polite">購入量と1回に使う量を入れると予定杯数を計算します(小数点以下切り捨て)。</p>
             <p class="hint">淹れた日はダッシュボードの「開封中の豆」から「+1杯」で記録します。使い切ると、購入金額 ÷ 実際の杯数で1杯あたりの金額が決まります。</p>
             <label class="check" id="bean-closed-wrap" hidden><input type="checkbox" id="bean-closed" /> 使い切った(実際の杯数で1杯あたりを計算)</label>
           </fieldset>
