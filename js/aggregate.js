@@ -79,6 +79,21 @@ export function shiftPeriod(granularity, anchorDate, delta, weekStart = 1) {
   return `${y + delta}-01-01`;
 }
 
+/**
+ * 1 日あたり平均の分母となる経過日数。
+ * 今日を含む期間は開始日〜今日、過去の期間は全日数、未来の期間は 0。
+ */
+export function elapsedDays(range, today) {
+  if (today < range.start) return 0;
+  const end = today < range.end ? today : range.end;
+  return daysBetween(range.start, end) + 1;
+}
+
+/** 1 日あたり金額(経過日数 0 なら null) */
+export function perDayAmount(total, days) {
+  return days > 0 ? total / days : null;
+}
+
 export function inRange(dateStr, range) {
   return dateStr >= range.start && dateStr <= range.end;
 }

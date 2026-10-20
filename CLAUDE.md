@@ -210,6 +210,7 @@
 2. **サマリーカード**（選択中の期間）
    - 合計金額
    - 杯数（`countsAsCup = true` のみ）
+   - 1 日あたり平均（合計金額 ÷ 経過日数。今日を含む期間は開始日〜今日の日数、過去の期間は全日数。2026-10-20 ユーザー指示で追加）
    - 1 杯あたり平均（豆購入を除いた金額 ÷ 杯数。杯数 0 のときは「−」）
    - **前期間比**：金額差（円）と増減率（%）。前期間が 0 円のときは率を表示せず「前期間なし」
 3. **内訳**
@@ -253,6 +254,7 @@
   - `quickPresets(entries, today, limit=6, windowDays=90)` → クイック入力候補
   - `lastAmountFor(entries, typeId, placeCategoryId, placeId)` → 直近金額（店が一致する記録を優先し、なければ区分が一致する記録）
   - `storeOrder(entries, places, categoryId, today, windowDays=90)` → 店のプルダウンの並び順
+  - `elapsedDays(range, today)` / `perDayAmount(total, days)` → 1 日あたり平均の分母と値
 
 ---
 
@@ -410,6 +412,7 @@ id,date,amount,type,placeCategory,place,note,createdAt,updatedAt
 
 ### 14.7 実装時に確定した仕様補足(2026-10-12)
 §1〜13 に明記が無く、実装時に決めた/やむを得ず変えた点。変更する場合はユーザーに確認する。
+- 2026-10-20 ユーザー指示で §5.2 にサマリー「1 日あたり平均」(合計÷経過日数)を追加。1 日あたり杯数は追加しない(ユーザー回答)。
 - 2026-10-12 ユーザー指示で §5 を変更: 起動時の初期画面を記録 → ダッシュボード、タブ順を「ダッシュボード / 記録する(中央・浮かせた丸ボタン) / 履歴」に。
 - `npm test` は `node --test "tests/*.test.js"`(§3 の `node --test tests/` は Node 22 でディレクトリ指定が「モジュールが見つからない」エラーになるため glob に変更。教訓 L1)。`tests/fixtures.js`(ダミーデータ)と `tests/db.test.js`(初期マスタ)を追加。
 - 追加ディレクトリ: `tools/`(`verify.mjs` 一括検証、`e2e_smoke.mjs` ブラウザ検証、`make_icons.mjs` アイコン生成)、`icons/icon.svg`(アイコン原図)。

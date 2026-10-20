@@ -16,6 +16,8 @@ import {
   summarize,
   periodComparison,
   compareSeries,
+  elapsedDays,
+  perDayAmount,
   filterEntries,
   groupByDate,
   findByName,
@@ -721,6 +723,11 @@ function renderDashboard() {
   $('sum-total').textContent = yen(cur.total);
   $('sum-cups').textContent = `${cur.cups}杯`;
   $('sum-avg').textContent = cur.avgPerCup === null ? '−' : yen(cur.avgPerCup);
+  // 1 日あたり平均: 今の期間は開始日〜今日、過去の期間は全日数で割る
+  const days = elapsedDays(range, today());
+  const perDay = perDayAmount(cur.total, days);
+  $('sum-perday').textContent = perDay === null ? '−' : yen(perDay);
+  $('sum-perday-sub').textContent = days > 0 ? `${days}日間で計算` : '期間がまだ始まっていません';
   const cmp = periodComparison(cur.total, prev.total);
   const diffEl = $('sum-diff');
   const rateEl = $('sum-rate');

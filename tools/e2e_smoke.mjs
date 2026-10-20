@@ -130,6 +130,7 @@ try {
   await p.click('.tab[data-view=dashboard]');
   const after = await p.textContent('#sum-total');
   check('保存後にダッシュボードが自動更新', before !== after, `${before}→${after}`);
+  check('1日あたり平均を表示', /^¥[\d,]+$/.test(await p.textContent('#sum-perday')) && /^\d+日間で計算$/.test(await p.textContent('#sum-perday-sub')), await p.textContent('#sum-perday'));
   check('グラフ描画', await p.evaluate(() => typeof Chart === 'function' && !!Chart.getChart(document.getElementById('chart-series'))));
 
   // 履歴: 編集と削除

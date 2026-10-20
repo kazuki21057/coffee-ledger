@@ -1,6 +1,6 @@
 // Service Worker: アプリシェルをプリキャッシュし、cache-first で配信する。
 // アセット(HTML/CSS/JS/vendor/icons)を変更したら必ず CACHE_VERSION を上げること。
-const CACHE_VERSION = 'coffee-v3';
+const CACHE_VERSION = 'coffee-v4';
 
 // すべて相対パス(GitHub Pages のサブパス配信に対応)
 const APP_SHELL = [

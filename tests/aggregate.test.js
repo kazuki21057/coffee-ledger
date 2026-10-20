@@ -16,6 +16,8 @@ import {
   groupByDate,
   lastCreated,
   needsBackupReminder,
+  elapsedDays,
+  perDayAmount,
 } from '../js/aggregate.js';
 import { TYPES, PLACES, entry } from './fixtures.js';
 
@@ -133,6 +135,31 @@ describe('summarize', () => {
     assert.equal(empty.cups, 0);
     assert.equal(empty.avgPerCup, null);
     assert.deepEqual(empty.byType, []);
+  });
+});
+
+describe('1日あたり金額(経過日数で割る)', () => {
+  test('今日を含む期間は開始日〜今日の日数', () => {
+    assert.equal(elapsedDays(periodRange('month', '2026-10-20'), '2026-10-20'), 20);
+    assert.equal(elapsedDays(periodRange('month', '2026-10-01'), '2026-10-01'), 1);
+    // 月曜始まりの週で水曜なら 3 日
+    assert.equal(elapsedDays(periodRange('week', '2026-10-21', 1), '2026-10-21'), 3);
+    assert.equal(elapsedDays(periodRange('year', '2026-10-20'), '2026-10-20'), 293);
+  });
+  test('過去の期間は全日数(うるう年の 2 月・年を含む)', () => {
+    assert.equal(elapsedDays(periodRange('month', '2028-02-10'), '2028-03-05'), 29);
+    assert.equal(elapsedDays(periodRange('month', '2027-02-10'), '2027-03-05'), 28);
+    assert.equal(elapsedDays(periodRange('week', '2026-10-01', 0), '2026-10-20'), 7);
+    assert.equal(elapsedDays(periodRange('year', '2028-06-01'), '2029-01-01'), 366);
+  });
+  test('未来の期間は 0 日で、平均は null', () => {
+    const d = elapsedDays(periodRange('month', '2026-11-05'), '2026-10-20');
+    assert.equal(d, 0);
+    assert.equal(perDayAmount(1000, d), null);
+  });
+  test('合計 ÷ 日数', () => {
+    assert.equal(perDayAmount(3100, 31), 100);
+    assert.equal(perDayAmount(0, 5), 0);
   });
 });
 
