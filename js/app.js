@@ -24,6 +24,7 @@ import {
 } from './aggregate.js';
 import * as charts from './charts.js';
 import { toCSV, parseImport, planImport, csvFilename, downloadText, readFileText } from './csv.js';
+import { APP_VERSION, CHANGELOG } from './version.js';
 
 // ---------------------------------------------------------------- 共通
 
@@ -1395,6 +1396,25 @@ function setupSettings() {
 }
 
 renderers.settings = renderSettings;
+
+// ---------------------------------------------------------------- ヘルプ
+
+function formatYmd(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return `${y}/${m}/${d}`;
+}
+
+function renderHelp() {
+  $('app-version').textContent = `${APP_VERSION}(${formatYmd(CHANGELOG[0].date)} 更新)`;
+  $('changelog').replaceChildren(
+    ...CHANGELOG.flatMap((r) => [
+      h('h3', {}, `${r.version}`, h('span', {}, formatYmd(r.date))),
+      h('ul', {}, ...r.changes.map((c) => h('li', {}, c))),
+    ]),
+  );
+}
+
+renderers.help = renderHelp;
 
 // ---------------------------------------------------------------- PWA(Service Worker)
 

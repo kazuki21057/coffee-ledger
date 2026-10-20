@@ -626,6 +626,34 @@ details > summary {
   min-width: 0;
 }
 
+.app-version {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog h3 {
+  margin: 12px 0 2px;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog h3:first-child {
+  margin-top: 0;
+}
+
+.changelog h3 span {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.changelog ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
 .stat.wide {
   grid-column: 1 / -1;
 }

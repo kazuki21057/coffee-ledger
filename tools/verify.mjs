@@ -127,6 +127,14 @@ const appShell = shellMatch ? [...shellMatch[1].matchAll(/'([^']+)'/g)].map((m) 
   }
 }
 
+// 5b. 更新履歴の最新バージョンと SW キャッシュ名の一致(js/version.js)
+if (exists('js/version.js')) {
+  const latest = (read('js/version.js').match(/version:\s*'([^']+)'/) || [])[1] ?? null;
+  const cache = (read('sw.js').match(/CACHE_VERSION\s*=\s*'([^']+)'/) || [])[1] ?? null;
+  checks.version = { ok: latest !== null && cache === `coffee-v${latest}`, latest, cache };
+  if (!checks.version.ok) checks.version.note = 'js/version.js の先頭の version と sw.js の CACHE_VERSION(coffee-v<version>)を揃えてください';
+}
+
 // 6. E2E スモーク(任意)
 if (runE2e) {
   process.stderr.write('[verify] e2e smoke\n');

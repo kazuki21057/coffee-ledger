@@ -14,6 +14,7 @@
    | `relative_paths` | `index.html` の src/href・manifest の `start_url`/`scope`/icons・`sw.js` の `APP_SHELL`・JS の import/register/fetch に `/` 始まりの絶対パスが無いこと(§2 サブパス配信) |
    | `unique_ids` | `index.html` 内の `id` 属性に重複が無いこと(L3) |
    | `precache` | `APP_SHELL` の全ファイルが存在し、`css/` `js/` `vendor/` `icons/` の配信アセットがすべて `APP_SHELL` に入っていること |
+   | `version` | `js/version.js` 先頭(最新)の `version` と `sw.js` の `CACHE_VERSION`(`coffee-v<version>`)が一致すること |
    | `sw_version` | 比較元(既定 `origin/main`)からアプリシェルが変わっているのに `CACHE_VERSION` が同じなら NG。比較元が無ければ `skipped` |
    | `e2e` | `--e2e` 指定時のみ。`tools/e2e_smoke.mjs` の結果(下記 2) |
 1. **ユニットテスト**: 集計・CSV のロジックを変えたら `tests/*.test.js` に対応するテストを追加する。§10 の自動テスト項目を削らない。

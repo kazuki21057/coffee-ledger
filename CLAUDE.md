@@ -403,7 +403,7 @@ id,date,amount,type,placeCategory,place,note,createdAt,updatedAt
 - 作業ブランチへの `git push` は、検証が完了していれば(`verifier` が全項目パス、またはコード変更を含まないドキュメント・設定のみ)確認不要。未検証・NG のままの push は事前に許可を得る。`--force` 系は常に確認(`.claude/settings.json` の `ask` に登録済み)。
 - ファイル削除・`git reset --hard`・`git clean` 等の破壊的操作は、その都度リスクを一言説明して確認を得る。
 - ハーネスの自動モード分類器にブロックされた場合、サブエージェント委譲などで回避しない。何を・なぜ実行しようとしたかを説明し、チャットで許可を得てから実行する。
-- **アセット(HTML/CSS/JS/vendor/icons)を変更したら `sw.js` の `CACHE_VERSION` を必ず上げる**(§8。`tools/verify.mjs` の `sw_version` が上げ忘れを検出する)。
+- **アセット(HTML/CSS/JS/vendor/icons)を変更したら `sw.js` の `CACHE_VERSION` を必ず上げる**(§8。`tools/verify.mjs` の `sw_version` が上げ忘れを検出する)。あわせて `js/version.js` の `CHANGELOG` 先頭に 1 件追加し(機能の追加・変更は 2 桁目、不具合修正のみは 3 桁目を上げる。文言は利用者向けの平易な日本語)、`CACHE_VERSION` を `coffee-v<version>` に揃える(`verify.mjs` の `version` が検査)。
 
 ### 14.6 トークン・出力量の規約
 - 1 ループのコストは「リクエスト数 × 平均コンテキスト長」にほぼ比例する。独立したツール呼び出しは 1 メッセージにまとめる/一度 Read したファイルを再 Read しない(Edit/Write 直後の確認 Read 禁止)/300 行超のファイルは Grep か Read(offset/limit) で必要箇所だけ/検証は短出力形(`tools/verify.mjs` の JSON)を読み、失敗時だけ詳細を取り直す/ブラウザ確認はスクリプト(`tools/e2e_smoke.mjs`)を優先しスクリーンショットは要所のみ。
@@ -412,6 +412,7 @@ id,date,amount,type,placeCategory,place,note,createdAt,updatedAt
 
 ### 14.7 実装時に確定した仕様補足(2026-10-12)
 §1〜13 に明記が無く、実装時に決めた/やむを得ず変えた点。変更する場合はユーザーに確認する。
+- 2026-10-20 ユーザー指示でヘルプ画面にバージョンと更新履歴を表示(`js/version.js` が正本、§14.5)。
 - 2026-10-20 ユーザー指示で §5.2 にサマリー「1 日あたり平均」(合計÷経過日数)を追加。1 日あたり杯数は追加しない(ユーザー回答)。
 - 2026-10-12 ユーザー指示で §5 を変更: 起動時の初期画面を記録 → ダッシュボード、タブ順を「ダッシュボード / 記録する(中央・浮かせた丸ボタン) / 履歴」に。
 - `npm test` は `node --test "tests/*.test.js"`(§3 の `node --test tests/` は Node 22 でディレクトリ指定が「モジュールが見つからない」エラーになるため glob に変更。教訓 L1)。`tests/fixtures.js`(ダミーデータ)と `tests/db.test.js`(初期マスタ)を追加。
