@@ -773,6 +773,21 @@ details > summary {
   justify-content: flex-end;
 }
 
+/* 入力欄用の幅指定(.store-add input)をチェックボックスには当てない */
+.store-add .check {
+  margin-top: 4px;
+}
+
+.store-add .check input {
+  flex: none;
+  min-width: 0;
+}
+
+.chip.add-chip {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
 .stat.wide {
   grid-column: 1 / -1;
 }

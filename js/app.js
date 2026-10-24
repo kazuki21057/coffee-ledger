@@ -480,7 +480,63 @@ function renderCatChips() {
         c.name,
       ),
     ),
+    h(
+      'button',
+      { type: 'button', class: 'chip add-chip', 'aria-expanded': String(!$('rec-cat-add').hidden), onclick: openCatAdd },
+      '＋ 追加',
+    ),
   );
+}
+
+// ---- 場所(区分)を記録画面から追加する ----
+
+function openCatAdd() {
+  $('rec-cat-add').hidden = false;
+  $('rec-cat-new-name').value = '';
+  $('rec-cat-new-has-stores').checked = false;
+  $('rec-cat-error').hidden = true;
+  renderCatChips();
+  $('rec-cat-new-name').focus();
+}
+
+function closeCatAdd() {
+  $('rec-cat-add').hidden = true;
+  $('rec-cat-error').hidden = true;
+  renderCatChips();
+}
+
+async function addCategoryFromForm() {
+  const name = normalizeName($('rec-cat-new-name').value);
+  const err = $('rec-cat-error');
+  const fail = (msg) => {
+    err.textContent = msg;
+    err.hidden = false;
+    $('rec-cat-new-name').focus();
+  };
+  if (!name) return fail('場所の名前を入力してください');
+  const dup = findByName(state.placeCategories, name);
+  if (dup) {
+    selectCategory(dup.id);
+    return fail(`「${dup.name}」はすでに登録されています。既存の場所を選択しました。`);
+  }
+  const cat = {
+    id: newId(),
+    name,
+    hasStores: $('rec-cat-new-has-stores').checked,
+    order: state.placeCategories.reduce((m, c) => Math.max(m, c.order), -1) + 1,
+    archived: false,
+  };
+  try {
+    await db.put('placeCategories', cat);
+    state.placeCategories.push(cat);
+    $('rec-cat-add').hidden = true;
+    err.hidden = true;
+    selectCategory(cat.id);
+    showToast(`「${name}」を追加しました`, null, 2500);
+  } catch (e) {
+    console.error(e);
+    fail('場所を追加できませんでした');
+  }
 }
 
 function selectCategory(catId) {
@@ -706,6 +762,8 @@ function resetForm() {
   $('note-details').open = false;
   $('store-new-name').value = '';
   $('store-error').hidden = true;
+  $('rec-cat-add').hidden = true;
+  $('rec-cat-error').hidden = true;
   $('edit-banner').hidden = true;
   $('save-btn').textContent = '保存';
   setDate(today(), true);
@@ -818,6 +876,14 @@ function setupRecord() {
     if (ev.key === 'Enter' && !ev.isComposing) {
       ev.preventDefault();
       addStore();
+    }
+  });
+  $('rec-cat-add-btn').addEventListener('click', addCategoryFromForm);
+  $('rec-cat-cancel-btn').addEventListener('click', closeCatAdd);
+  $('rec-cat-new-name').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.isComposing) {
+      ev.preventDefault();
+      addCategoryFromForm();
     }
   });
   $('bean-select').addEventListener('change', onBeanSelectChange);

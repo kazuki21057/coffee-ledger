@@ -66,7 +66,7 @@ try {
   await p.click('.tab-record');
   await p.waitForSelector('#type-chips .chip');
   await p.evaluate(() => navigator.serviceWorker?.ready);
-  check('初期マスタ(種類5・区分4)', (await p.$$('#type-chips .chip')).length === 5 && (await p.$$('#cat-chips .chip')).length === 4);
+  check('初期マスタ(種類5・区分4)', (await p.$$('#type-chips .chip')).length === 5 && (await p.$$('#cat-chips .chip:not(.add-chip)')).length === 4);
   check('保存ボタンは必須項目が揃うまで無効', await p.isDisabled('#save-btn'));
 
   // 自宅: 種類→区分→金額→保存(4操作)
@@ -105,6 +105,21 @@ try {
   await p.waitForTimeout(150);
   check('追加した店がプルダウンで選択される', (await p.$eval('#store-select', (s) => s.selectedOptions[0]?.textContent)) === 'テスト珈琲');
   await p.click('#cat-chips .chip:has-text("カフェ")');
+
+  // 場所(区分)を記録画面で追加
+  await p.click('#cat-chips .add-chip');
+  await p.fill('#rec-cat-new-name', '職場');
+  await p.check('#rec-cat-new-has-stores');
+  await p.press('#rec-cat-new-name', 'Enter');
+  await p.waitForTimeout(150);
+  const pressed = await p.$$eval('#cat-chips [aria-pressed=true]', (x) => x.map((e) => e.textContent));
+  check('記録画面で場所を追加して選択(店を持つ→店の入力欄)', pressed.join() === '職場' && (await p.isVisible('#store-area')) && (await p.isHidden('#rec-cat-add')), pressed.join());
+  await p.click('#cat-chips .add-chip');
+  await p.fill('#rec-cat-new-name', ' ｺﾝﾋﾞﾆ ');
+  await p.click('#rec-cat-add-btn');
+  check('同名の場所は追加せず既存を選択', (await p.textContent('#rec-cat-error')).includes('すでに登録') && (await p.$$eval('#cat-chips [aria-pressed=true]', (x) => x.map((e) => e.textContent).join())) === 'コンビニ');
+  await p.click('#rec-cat-cancel-btn');
+  await p.click('#cat-chips .chip:has-text("コンビニ")');
 
   // 直近金額の自動入力
   await p.click('#type-chips .chip:has-text("ドリップ")');

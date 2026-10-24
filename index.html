@@ -95,6 +95,16 @@
           <fieldset>
             <legend>場所</legend>
             <div class="chips" id="cat-chips"></div>
+            <div class="store-add" id="rec-cat-add" hidden>
+              <div class="row">
+                <label class="visually-hidden" for="rec-cat-new-name">新しい場所の名前</label>
+                <input type="text" id="rec-cat-new-name" placeholder="場所の名前(例: 職場)" maxlength="20" autocomplete="off" enterkeyhint="done" />
+                <button type="button" class="btn small" id="rec-cat-add-btn">追加</button>
+                <button type="button" class="btn small secondary" id="rec-cat-cancel-btn">キャンセル</button>
+              </div>
+              <label class="check"><input type="checkbox" id="rec-cat-new-has-stores" /> 店を持つ(店のプルダウンを出す)</label>
+              <p class="error" id="rec-cat-error" role="alert" hidden></p>
+            </div>
             <div class="store-area" id="store-area" hidden>
               <label class="visually-hidden" for="store-select">店</label>
               <select id="store-select"></select>
