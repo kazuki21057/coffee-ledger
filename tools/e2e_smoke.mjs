@@ -66,7 +66,7 @@ try {
   await p.click('.tab-record');
   await p.waitForSelector('#type-chips .chip');
   await p.evaluate(() => navigator.serviceWorker?.ready);
-  check('初期マスタ(種類5・区分4)', (await p.$$('#type-chips .chip')).length === 5 && (await p.$$('#cat-chips .chip:not(.add-chip)')).length === 4);
+  check('初期マスタ(種類5・区分4)', (await p.$$('#type-chips .chip:not(.add-chip)')).length === 5 && (await p.$$('#cat-chips .chip:not(.add-chip)')).length === 4);
   check('保存ボタンは必須項目が揃うまで無効', await p.isDisabled('#save-btn'));
 
   // 自宅: 種類→区分→金額→保存(4操作)
@@ -105,6 +105,13 @@ try {
   await p.waitForTimeout(150);
   check('追加した店がプルダウンで選択される', (await p.$eval('#store-select', (s) => s.selectedOptions[0]?.textContent)) === 'テスト珈琲');
   await p.click('#cat-chips .chip:has-text("カフェ")');
+
+  // 種類を記録画面で追加
+  await p.click('#type-chips .add-chip');
+  await p.fill('#rec-type-new-name', 'エスプレッソ');
+  await p.press('#rec-type-new-name', 'Enter');
+  await p.waitForTimeout(150);
+  check('記録画面で種類を追加して選択', (await p.$$eval('#type-chips [aria-pressed=true]', (x) => x.map((e) => e.textContent).join())) === 'エスプレッソ');
 
   // 場所(区分)を記録画面で追加
   await p.click('#cat-chips .add-chip');
@@ -146,6 +153,9 @@ try {
   const after = await p.textContent('#sum-total');
   check('保存後にダッシュボードが自動更新', before !== after, `${before}→${after}`);
   check('1日あたり平均を表示', /^¥[\d,]+$/.test(await p.textContent('#sum-perday')) && /^\d+日間で計算$/.test(await p.textContent('#sum-perday-sub')), await p.textContent('#sum-perday'));
+  await p.click('.seg[data-series=line]');
+  check('期間比較を折れ線に切り替え', await p.evaluate(() => Chart.getChart(document.getElementById('chart-series'))?.config.type === 'line'));
+  await p.click('.seg[data-series=bar]');
   check('グラフ描画', await p.evaluate(() => typeof Chart === 'function' && !!Chart.getChart(document.getElementById('chart-series'))));
 
   // 豆: 新しい豆で購入(予定10杯・¥1,000)→ ダッシュボードで +1杯 → 使い切り

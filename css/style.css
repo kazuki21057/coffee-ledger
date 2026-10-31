@@ -584,6 +584,14 @@ details > summary {
   border-left: 1px solid var(--border);
 }
 
+.segmented.small {
+  grid-template-columns: repeat(2, auto);
+}
+
+.segmented.small .seg {
+  padding: 0 14px;
+}
+
 .seg[aria-pressed='true'] {
   background: var(--accent);
   color: var(--accent-text);

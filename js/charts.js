@@ -241,3 +241,91 @@ export function renderStacked(canvas, labels, series, totals, highlight) {
     plugins: [valueLabels('stackTotal', totals, highlight)],
   });
 }
+
+/**
+ * 期間比較の折れ線。太線が合計、細線が種類別。選択中の期間(highlight)の点を大きくする。
+ * 引数は renderStacked と同じ。
+ */
+export function renderLines(canvas, labels, series, totals, highlight) {
+  const t = theme();
+  const radius = (base, big) => labels.map((_, i) => (i === highlight ? big : base));
+  return draw(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '合計',
+          data: totals,
+          borderColor: t.text,
+          backgroundColor: t.text,
+          borderWidth: 3,
+          pointRadius: radius(3, 6),
+          pointHoverRadius: 7,
+          tension: 0.2,
+        },
+        ...series.map((s) => ({
+          label: s.label,
+          data: s.data,
+          borderColor: s.color,
+          backgroundColor: s.color,
+          borderWidth: 1.5,
+          pointRadius: radius(2, 4),
+          tension: 0.2,
+        })),
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      // 右端(選択中の期間)の金額ラベルが切れないよう余白を取る
+      layout: { padding: { right: 18, top: 4 } },
+      scales: {
+        x: {
+          ticks: {
+            color: (c) => (c.index === highlight ? t.text : t.muted),
+            font: (c) => ({ weight: c.index === highlight ? '700' : '400', size: 11 }),
+            maxRotation: 0,
+            autoSkip: true,
+          },
+          grid: { display: false },
+        },
+        y: { beginAtZero: true, grace: '12%', ticks: { color: t.muted, callback: (v) => yen(v) }, grid: { color: t.grid } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: t.text, boxWidth: 12, padding: 10 } },
+        tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${yen(c.parsed.y)}` } },
+      },
+    },
+    plugins: [lineTotalLabels(totals, highlight)],
+  });
+}
+
+/** 折れ線の合計の点に金額を描く(幅が足りなければ選択中の期間だけ) */
+function lineTotalLabels(totals, highlight) {
+  return {
+    id: 'lineTotalLabels',
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || meta.hidden) return;
+      const { ctx } = chart;
+      const n = chart.data.labels.length;
+      const slot = n > 0 ? (chart.chartArea.right - chart.chartArea.left) / n : 0;
+      ctx.save();
+      ctx.fillStyle = theme().text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.font = '600 10px system-ui, sans-serif';
+      totals.forEach((v, i) => {
+        const pt = meta.data[i];
+        if (!pt) return;
+        const text = v >= 100000 ? `${(v / 10000).toFixed(0)}万` : v >= 10000 ? `${(v / 10000).toFixed(1)}万` : yenFmt.format(v);
+        if (i !== highlight && ctx.measureText(text).width > slot - 2) return;
+        ctx.fillText(text, pt.x, pt.y - 8);
+      });
+      ctx.restore();
+    },
+  };
+}

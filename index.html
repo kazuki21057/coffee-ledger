@@ -58,6 +58,16 @@
           <fieldset>
             <legend>種類 <span class="req">必須</span></legend>
             <div class="chips" id="type-chips"></div>
+            <div class="store-add" id="rec-type-add" hidden>
+              <div class="row">
+                <label class="visually-hidden" for="rec-type-new-name">新しい種類の名前</label>
+                <input type="text" id="rec-type-new-name" placeholder="種類の名前(例: エスプレッソ)" maxlength="20" autocomplete="off" enterkeyhint="done" />
+                <button type="button" class="btn small" id="rec-type-add-btn">追加</button>
+                <button type="button" class="btn small secondary" id="rec-type-cancel-btn">キャンセル</button>
+              </div>
+              <label class="check"><input type="checkbox" id="rec-type-counts" checked /> 杯数に数える</label>
+              <p class="error" id="rec-type-error" role="alert" hidden></p>
+            </div>
           </fieldset>
 
           <fieldset id="bean-fieldset" hidden>
@@ -208,9 +218,15 @@
           </section>
 
           <section class="card">
-            <h2 id="series-title">期間比較</h2>
-            <div class="chart-box series"><canvas id="chart-series" role="img" aria-label="期間ごとの合計金額の種類別積み上げ棒グラフ"></canvas></div>
-            <p class="hint">濃い色のバーが選択中の期間です。バーの上の数字は合計金額(円)。</p>
+            <div class="card-head">
+              <h2 id="series-title">期間比較</h2>
+              <div class="segmented small" role="group" aria-label="グラフの種類">
+                <button type="button" class="seg" data-series="bar" aria-pressed="true">棒</button>
+                <button type="button" class="seg" data-series="line" aria-pressed="false">折れ線</button>
+              </div>
+            </div>
+            <div class="chart-box series"><canvas id="chart-series" role="img" aria-label="期間ごとの合計金額のグラフ"></canvas></div>
+            <p class="hint" id="series-hint">濃い色のバーが選択中の期間です。バーの上の数字は合計金額(円)。</p>
             <details class="series-details">
               <summary>数値を表で見る</summary>
               <table class="data-table">

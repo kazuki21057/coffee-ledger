@@ -342,6 +342,9 @@ function isActiveCombo(p) {
   return true;
 }
 
+// クイック入力のボタン数(1.8.0 で 6 → 3、ユーザー指示)
+const QUICK_PRESET_LIMIT = 3;
+
 /** クイック入力の候補: 豆購入は豆・予定杯数が必要なので除く */
 function isPresetCombo(p) {
   return p.typeId !== BEANS_TYPE_ID && isActiveCombo(p);
@@ -364,7 +367,7 @@ function renderBackupNotice() {
 
 function renderPresets() {
   const box = $('presets');
-  const presets = quickPresets(state.entries, today(), 6, 90, isPresetCombo);
+  const presets = quickPresets(state.entries, today(), QUICK_PRESET_LIMIT, 90, isPresetCombo);
   box.replaceChildren(
     ...presets.map((p) => {
       const main = h(
@@ -451,18 +454,72 @@ function renderTypeChips() {
           type: 'button',
           class: 'chip',
           'aria-pressed': String(form.typeId === t.id),
-          onclick: () => {
-            form.typeId = t.id;
-            renderTypeChips();
-            renderBeanArea({ focusInput: true });
-            autoFillAmount();
-            updateSaveState();
-          },
+          onclick: () => selectType(t.id),
         },
         t.name,
       ),
     ),
+    h('button', { type: 'button', class: 'chip add-chip', 'aria-expanded': String(!$('rec-type-add').hidden), onclick: openTypeAdd }, '＋ 追加'),
   );
+}
+
+// ---- 種類を記録画面から追加する(場所の追加と同じ方式) ----
+
+function openTypeAdd() {
+  $('rec-type-add').hidden = false;
+  $('rec-type-new-name').value = '';
+  $('rec-type-counts').checked = true;
+  $('rec-type-error').hidden = true;
+  renderTypeChips();
+  $('rec-type-new-name').focus();
+}
+
+function closeTypeAdd() {
+  $('rec-type-add').hidden = true;
+  $('rec-type-error').hidden = true;
+  renderTypeChips();
+}
+
+function selectType(typeId) {
+  form.typeId = typeId;
+  renderTypeChips();
+  renderBeanArea({ focusInput: true });
+  autoFillAmount();
+  updateSaveState();
+}
+
+async function addTypeFromForm() {
+  const name = normalizeName($('rec-type-new-name').value);
+  const err = $('rec-type-error');
+  const fail = (msg) => {
+    err.textContent = msg;
+    err.hidden = false;
+    $('rec-type-new-name').focus();
+  };
+  if (!name) return fail('種類の名前を入力してください');
+  const dup = findByName(state.types, name);
+  if (dup) {
+    selectType(dup.id);
+    return fail(`「${dup.name}」はすでに登録されています。既存の種類を選択しました。`);
+  }
+  const type = {
+    id: newId(),
+    name,
+    countsAsCup: $('rec-type-counts').checked,
+    order: state.types.reduce((m, t) => Math.max(m, t.order), -1) + 1,
+    archived: false,
+  };
+  try {
+    await db.put('types', type);
+    state.types.push(type);
+    $('rec-type-add').hidden = true;
+    err.hidden = true;
+    selectType(type.id);
+    showToast(`「${name}」を追加しました`, null, 2500);
+  } catch (e) {
+    console.error(e);
+    fail('種類を追加できませんでした');
+  }
 }
 
 function renderCatChips() {
@@ -764,6 +821,8 @@ function resetForm() {
   $('store-error').hidden = true;
   $('rec-cat-add').hidden = true;
   $('rec-cat-error').hidden = true;
+  $('rec-type-add').hidden = true;
+  $('rec-type-error').hidden = true;
   $('edit-banner').hidden = true;
   $('save-btn').textContent = '保存';
   setDate(today(), true);
@@ -876,6 +935,14 @@ function setupRecord() {
     if (ev.key === 'Enter' && !ev.isComposing) {
       ev.preventDefault();
       addStore();
+    }
+  });
+  $('rec-type-add-btn').addEventListener('click', addTypeFromForm);
+  $('rec-type-cancel-btn').addEventListener('click', closeTypeAdd);
+  $('rec-type-new-name').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.isComposing) {
+      ev.preventDefault();
+      addTypeFromForm();
     }
   });
   $('rec-cat-add-btn').addEventListener('click', addCategoryFromForm);
@@ -1079,7 +1146,7 @@ function renderDashboard() {
   const cur = summarize(state.entries, state.types, range);
   const prev = summarize(state.entries, state.types, prevRange);
 
-  for (const b of document.querySelectorAll('.seg')) b.setAttribute('aria-pressed', String(b.dataset.gran === g));
+  for (const b of document.querySelectorAll('.seg[data-gran]')) b.setAttribute('aria-pressed', String(b.dataset.gran === g));
   $('period-label').textContent = periodLabel(g, range);
   const isCurrent = today() >= range.start && today() <= range.end;
   $('period-today').hidden = isCurrent;
@@ -1263,7 +1330,14 @@ function renderSeries(g, anchor, ws, chartsOk) {
   const used = state.types.filter((t) => periods.some((p) => p.byType[t.id]));
   const series = used.map((t) => ({ label: t.name, data: periods.map((p) => p.byType[t.id] || 0), color: typeColor(t.id) }));
   const labels = periods.map((p, i) => seriesLabel(g, p, i, periods));
-  charts.renderStacked(
+  const mode = state.settings.seriesChart === 'line' ? 'line' : 'bar';
+  for (const b of document.querySelectorAll('.seg[data-series]')) b.setAttribute('aria-pressed', String(b.dataset.series === mode));
+  $('series-hint').textContent =
+    mode === 'line'
+      ? '太線が合計、細線が種類別です。大きい点が選択中の期間で、数字は合計金額(円)。'
+      : '濃い色のバーが選択中の期間です。バーの上の数字は合計金額(円)。';
+  const render = mode === 'line' ? charts.renderLines : charts.renderStacked;
+  render(
     $('chart-series'),
     labels,
     series,
@@ -1273,10 +1347,18 @@ function renderSeries(g, anchor, ws, chartsOk) {
 }
 
 function setupDashboard() {
-  for (const b of document.querySelectorAll('.seg')) {
+  for (const b of document.querySelectorAll('.seg[data-gran]')) {
     b.addEventListener('click', () => {
       dash.granularity = b.dataset.gran;
       renderDashboard();
+    });
+  }
+  // 期間比較のグラフ種類(棒/折れ線)。選択は設定に保存して次回も使う
+  for (const b of document.querySelectorAll('.seg[data-series]')) {
+    b.addEventListener('click', () => {
+      state.settings.seriesChart = b.dataset.series;
+      renderDashboard();
+      db.setSetting('seriesChart', b.dataset.series).catch((err) => console.error(err));
     });
   }
   const move = (delta) => {
