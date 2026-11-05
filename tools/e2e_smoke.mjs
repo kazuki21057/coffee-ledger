@@ -172,6 +172,9 @@ try {
   check('購入量÷1回の量で予定杯数(切り捨て)', (await p.inputValue('#planned-cups')) === '6', await p.textContent('#grams-result'));
   await p.fill('#planned-cups', '10');
   await p.dispatchEvent('#planned-cups', 'input');
+  // 豆はカフェ・テスト珈琲で買ったことにする(+1杯の記録に場所が引き継がれるかを確認するため)
+  if ((await p.getAttribute('#cat-chips .chip:has-text("カフェ")', 'aria-pressed')) !== 'true') await p.click('#cat-chips .chip:has-text("カフェ")');
+  await p.selectOption('#store-select', { label: 'テスト珈琲' });
   await p.fill('#amount', '1000');
   await p.dispatchEvent('#amount', 'input');
   await p.click('#save-btn');
@@ -182,6 +185,13 @@ try {
   const cups0 = await p.textContent('#sum-cups');
   await p.click('#bag-list button:has-text("+1杯")');
   await p.waitForTimeout(200);
+  const inherit = await p.evaluate(async () => {
+    const all = await (await import('./js/db.js')).getAll('entries');
+    const cup = all.filter((e) => e.bagId).sort((x, y) => (x.createdAt < y.createdAt ? 1 : -1))[0];
+    const bag = all.find((e) => e.id === cup?.bagId);
+    return { ok: Boolean(cup && bag && bag.placeCategoryId === 'cafe' && cup.placeCategoryId === bag.placeCategoryId && cup.placeId === bag.placeId && cup.placeId), cup: cup && [cup.placeCategoryId, cup.placeId] };
+  });
+  check('+1杯の記録は豆を買った場所(店を含む)を引き継ぐ', inherit.ok, JSON.stringify(inherit.cup));
   check('+1杯でその日の杯数が増える', (await p.textContent('#sum-cups')) !== cups0 && (await p.textContent('#bag-list')).includes('1杯 / 予定10杯'), `${cups0}→${await p.textContent('#sum-cups')}`);
   await p.click('#bag-list button:has-text("使い切った")');
   await p.waitForTimeout(200);

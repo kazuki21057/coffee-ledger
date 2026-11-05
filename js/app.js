@@ -1288,10 +1288,15 @@ function renderBags() {
   );
 }
 
-/** 袋から 1 杯淹れた記録(今日・自宅・ドリップ・0 円。金額は袋の単価で集計する) */
+/**
+ * 袋から 1 杯淹れた記録(今日・ドリップ・0 円。金額は袋の単価で集計する)。
+ * 場所は袋(豆購入の記録)の場所を引き継ぐ。袋に場所が無ければ自宅(1.8.1)。
+ */
 async function addBagCup(bag) {
   try {
-    const cup = buildEntry({ typeId: 'drip', placeCategoryId: 'home', placeId: null, amount: 0, date: today(), bagId: bag.id });
+    const placeCategoryId = bag.placeCategoryId && catById(bag.placeCategoryId) ? bag.placeCategoryId : 'home';
+    const placeId = placeCategoryId === bag.placeCategoryId ? bag.placeId ?? null : null;
+    const cup = buildEntry({ typeId: 'drip', placeCategoryId, placeId, amount: 0, date: today(), bagId: bag.id });
     await saveEntry(cup, { message: `${bagLabel(bag)}を1杯記録しました` });
   } catch (err) {
     console.error(err);
