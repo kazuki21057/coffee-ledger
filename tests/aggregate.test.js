@@ -24,6 +24,7 @@ import {
   beanOrder,
   lastPurchaseOf,
   cupsFromGrams,
+  bagCupPlaceFixes,
 } from '../js/aggregate.js';
 import { TYPES, PLACES, entry } from './fixtures.js';
 
@@ -443,5 +444,29 @@ describe('購入量(g)と1回の量(g)から予定杯数', () => {
     assert.equal(cupsFromGrams(0, 15), null);
     assert.equal(cupsFromGrams(100, 0), null);
     assert.equal(cupsFromGrams(NaN, 15), null);
+  });
+});
+
+describe('既存の「+1杯」の場所を袋に合わせる(1.8.1)', () => {
+  test('自宅のままの杯だけを袋の場所(店を含む)に直す', () => {
+    const bag = entry('2026-10-01', 'beans', 1600, 'cafe', 'blue', { id: 'bagA', plannedCups: 10 });
+    const noPlaceBag = entry('2026-10-01', 'beans', 1000, null, null, { id: 'bagB', plannedCups: 10 });
+    const es = [
+      bag,
+      noPlaceBag,
+      entry('2026-10-02', 'drip', 0, 'home', null, { id: 'c1', bagId: 'bagA' }),
+      entry('2026-10-03', 'drip', 0, 'conv', 'seven', { id: 'c2', bagId: 'bagA' }), // 手で直した杯は対象外
+      entry('2026-10-04', 'drip', 0, 'home', null, { id: 'c3', bagId: 'bagB' }), // 袋に場所なし
+      entry('2026-10-05', 'drip', 0, 'home', null, { id: 'c4', bagId: 'gone' }), // 袋が無い
+      entry('2026-10-06', 'drip', 0, 'home', null, { id: 'c5' }), // 袋と無関係
+    ];
+    const fixes = bagCupPlaceFixes(es);
+    assert.deepEqual(
+      fixes.map((e) => [e.id, e.placeCategoryId, e.placeId]),
+      [['c1', 'cafe', 'blue']],
+    );
+    // 直した後にもう一度実行しても何も出ない(何度起動しても安全)
+    const after = es.map((e) => fixes.find((f) => f.id === e.id) || e);
+    assert.deepEqual(bagCupPlaceFixes(after), []);
   });
 });

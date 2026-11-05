@@ -26,6 +26,7 @@ import {
   beanOrder,
   lastPurchaseOf,
   cupsFromGrams,
+  bagCupPlaceFixes,
   filterEntries,
   groupByDate,
   findByName,
@@ -2014,6 +2015,20 @@ async function start() {
     console.error(err);
     showToast('データベースを開けませんでした。ブラウザの設定を確認してください。', null, 10000);
     return;
+  }
+  // 1.8.1: 以前の「+1杯」で自宅になっていた杯の場所を、袋(豆購入)の場所に一度だけ直す
+  if (!state.settings.bagCupPlaceFixed) {
+    try {
+      const fixes = bagCupPlaceFixes(state.entries);
+      if (fixes.length) {
+        const ts = nowIso();
+        await db.putMany({ entries: fixes.map((e) => ({ ...e, updatedAt: ts })) });
+      }
+      await db.setSetting('bagCupPlaceFixed', true);
+      if (fixes.length) showToast(`豆から淹れた${fixes.length}杯の場所を、豆を買った場所に直しました`);
+    } catch (err) {
+      console.error(err);
+    }
   }
   // 初回起動時にストレージの永続化を要求する(結果は設定画面に表示)
   if (!state.settings.persistRequested) {

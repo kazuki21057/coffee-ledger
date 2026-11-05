@@ -227,6 +227,23 @@ export function cupsFromGrams(grams, gramsPerCup) {
   return Math.floor(grams / gramsPerCup + 1e-9);
 }
 
+/**
+ * 1.8.0 以前の「+1杯」の記録は場所が常に自宅(店なし)だった。袋に場所がある杯について、
+ * 袋の場所に直した記録の一覧を返す(更新日時は呼び出し側で付ける)。
+ * 自宅以外に手で直した杯・袋に場所が無い杯・袋が見つからない杯は対象外。
+ */
+export function bagCupPlaceFixes(entries) {
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const fixes = [];
+  for (const e of entries) {
+    if (!e.bagId || e.placeCategoryId !== 'home' || e.placeId) continue;
+    const bag = byId.get(e.bagId);
+    if (!bag || !bag.placeCategoryId || bag.placeCategoryId === 'home') continue;
+    fixes.push({ ...e, placeCategoryId: bag.placeCategoryId, placeId: bag.placeId ?? null });
+  }
+  return fixes;
+}
+
 /** 開封中の袋(予定杯数があり、使い切っていない豆購入)を新しい順に */
 export function openBags(entries) {
   return entries.filter((e) => isBeanPurchase(e) && !e.closedAt && e.plannedCups > 0).sort(compareRecency);
