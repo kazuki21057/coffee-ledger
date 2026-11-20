@@ -134,6 +134,20 @@ try {
   await p.selectOption('#store-select', { label: 'セブン' });
   check('種類＋店で直近金額を自動入力', (await p.inputValue('#amount')) === '120');
 
+  // クイック入力に登録(重複は登録しない)・直近 1 件の表示
+  const regBefore = (await p.$$('.preset:not(.latest)')).length;
+  await p.click('#register-preset');
+  await p.waitForTimeout(150);
+  const regAfter = (await p.$$('.preset:not(.latest)')).length;
+  await p.click('#register-preset');
+  await p.waitForTimeout(150);
+  check(
+    'フォームの内容をクイック入力に登録(同じ内容は重複登録しない)',
+    regAfter === regBefore + 1 && (await p.$$('.preset:not(.latest)')).length === regAfter && (await p.textContent('#toast-msg')).includes('すでに'),
+    `${regBefore}→${regAfter}`,
+  );
+  check('クイック入力に直近の記録を1件表示', (await p.$$('.preset.latest')).length === 1);
+
   // クイック入力 1 タップ → 元に戻す
   const n0 = await count();
   await p.click('.preset-main >> nth=0');
@@ -147,7 +161,7 @@ try {
   await p.click('.tab[data-view=dashboard]');
   const before = await p.textContent('#sum-total');
   await p.click('.tab[data-view=record]');
-  await p.click('#same-as-last');
+  await p.click('.preset.latest .preset-main');
   await p.waitForTimeout(150);
   await p.click('.tab[data-view=dashboard]');
   const after = await p.textContent('#sum-total');
@@ -226,6 +240,10 @@ try {
   await p.click('#menu-btn');
   await p.click('#menu [data-view=help]');
   check('ヘルプにバージョンと更新履歴', /^\d+\.\d+\.\d+\(\d{4}\/\d{1,2}\/\d{1,2} 更新\)$/.test(await p.textContent('#app-version')) && (await p.$$('#changelog h3')).length >= 1, await p.textContent('#app-version'));
+  await p.click('#menu-btn');
+  await p.click('#menu [data-view=settings]');
+  check('設定にクイック入力の一覧', (await p.$$('#presets-list .master-row')).length >= 1);
+  await p.click('#back-btn');
   check('横スクロールなし(幅360px)', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
   check('コンソールエラーなし', errors.length === 0, errors.slice(0, 5).join(' | '));
 } catch (err) {

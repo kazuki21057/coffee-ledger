@@ -46,7 +46,6 @@
           <h2>クイック入力</h2>
           <p class="hint" id="quick-hint">ボタンを押すと今日の日付ですぐ保存します。長押しまたは ✎ で内容を修正できます。</p>
           <div class="presets" id="presets"></div>
-          <button type="button" class="btn secondary block" id="same-as-last" disabled>前回と同じ</button>
         </section>
 
         <form class="card" id="entry-form" novalidate>
@@ -154,6 +153,7 @@
           </details>
 
           <button type="submit" class="btn primary block" id="save-btn" disabled>保存</button>
+          <button type="button" class="btn secondary block register-preset" id="register-preset" disabled>この内容をクイック入力に登録</button>
         </form>
       </section>
 
@@ -282,6 +282,12 @@
           <h2>週の開始曜日</h2>
           <label class="visually-hidden" for="week-start">週の開始曜日</label>
           <select id="week-start"></select>
+        </section>
+
+        <section class="card">
+          <h2>クイック入力</h2>
+          <p class="hint">最大3件。記録画面で種類・場所・金額を入れて「この内容をクイック入力に登録」で追加します。表示名は空欄にすると自動の名前になります。</p>
+          <ul class="master-list" id="presets-list"></ul>
         </section>
 
         <section class="card">

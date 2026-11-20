@@ -244,6 +244,26 @@ export function bagCupPlaceFixes(entries) {
   return fixes;
 }
 
+// ---- ユーザーが登録するクイック入力(1.9.0) ----
+
+export const USER_PRESET_LIMIT = 3;
+
+/** クイック入力の同一判定のキー(種類+区分+店+金額) */
+export function userPresetKey(p) {
+  return `${p.typeId}|${p.placeCategoryId ?? ''}|${p.placeId ?? ''}|${p.amount}`;
+}
+
+/**
+ * 登録済みのクイック入力に 1 件加える。上限・重複なら加えずに理由を返す。
+ * @returns {{list:object[], error:null|'limit'|'duplicate'}}
+ */
+export function addUserPreset(list, preset, limit = USER_PRESET_LIMIT) {
+  const key = userPresetKey(preset);
+  if (list.some((p) => userPresetKey(p) === key)) return { list, error: 'duplicate' };
+  if (list.length >= limit) return { list, error: 'limit' };
+  return { list: [...list, preset], error: null };
+}
+
 /** 開封中の袋(予定杯数があり、使い切っていない豆購入)を新しい順に */
 export function openBags(entries) {
   return entries.filter((e) => isBeanPurchase(e) && !e.closedAt && e.plannedCups > 0).sort(compareRecency);

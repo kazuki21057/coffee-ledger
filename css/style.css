@@ -796,6 +796,25 @@ details > summary {
   color: var(--text-muted);
 }
 
+.register-preset {
+  margin-top: 8px;
+}
+
+.preset.latest {
+  border-style: dashed;
+}
+
+.p-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
 .stat.wide {
   grid-column: 1 / -1;
 }

@@ -25,6 +25,8 @@ import {
   lastPurchaseOf,
   cupsFromGrams,
   bagCupPlaceFixes,
+  addUserPreset,
+  USER_PRESET_LIMIT,
 } from '../js/aggregate.js';
 import { TYPES, PLACES, entry } from './fixtures.js';
 
@@ -468,5 +470,23 @@ describe('既存の「+1杯」の場所を袋に合わせる(1.8.1)', () => {
     // 直した後にもう一度実行しても何も出ない(何度起動しても安全)
     const after = es.map((e) => fixes.find((f) => f.id === e.id) || e);
     assert.deepEqual(bagCupPlaceFixes(after), []);
+  });
+});
+
+describe('登録するクイック入力(1.9.0)', () => {
+  const p = (typeId, amount, placeCategoryId = null, placeId = null) => ({ id: `${typeId}${amount}`, typeId, amount, placeCategoryId, placeId });
+  test('上限は3件、同じ組み合わせ(種類+区分+店+金額)は重複として加えない', () => {
+    assert.equal(USER_PRESET_LIMIT, 3);
+    let r = addUserPreset([], p('drip', 120, 'conv', 'seven'));
+    assert.equal(r.error, null);
+    r = addUserPreset(r.list, p('drip', 120, 'conv', 'seven'));
+    assert.equal(r.error, 'duplicate');
+    assert.equal(r.list.length, 1);
+    r = addUserPreset(r.list, p('drip', 150, 'conv', 'seven')); // 金額違いは別
+    r = addUserPreset(r.list, p('latte', 180));
+    assert.equal(r.list.length, 3);
+    const full = addUserPreset(r.list, p('can', 130));
+    assert.equal(full.error, 'limit');
+    assert.equal(full.list.length, 3);
   });
 });

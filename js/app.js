@@ -27,6 +27,9 @@ import {
   lastPurchaseOf,
   cupsFromGrams,
   bagCupPlaceFixes,
+  addUserPreset,
+  userPresetKey,
+  USER_PRESET_LIMIT,
   filterEntries,
   groupByDate,
   findByName,
@@ -343,8 +346,23 @@ function isActiveCombo(p) {
   return true;
 }
 
-// クイック入力のボタン数(1.8.0 で 6 → 3、ユーザー指示)
-const QUICK_PRESET_LIMIT = 3;
+// クイック入力: 自分で登録した最大 3 件(設定 quickPresets)+ 直近の記録 1 件(1.9.0、ユーザー指示)
+// 1.8.x までの自動候補(よく使う組み合わせ)は、更新後の初回起動時に登録済みとして引き継ぐ
+const LEGACY_PRESET_LIMIT = 3;
+
+function userPresets() {
+  return Array.isArray(state.settings.quickPresets) ? state.settings.quickPresets : [];
+}
+
+async function saveUserPresets(list) {
+  state.settings.quickPresets = list;
+  await db.setSetting('quickPresets', list);
+}
+
+/** 表示名(未設定なら「種類｜場所」) */
+function presetTitle(p) {
+  return p.label || typeName(p.typeId);
+}
 
 /** クイック入力の候補: 豆購入は豆・予定杯数が必要なので除く */
 function isPresetCombo(p) {
@@ -368,33 +386,72 @@ function renderBackupNotice() {
 
 function renderPresets() {
   const box = $('presets');
-  const presets = quickPresets(state.entries, today(), QUICK_PRESET_LIMIT, 90, isPresetCombo);
-  box.replaceChildren(
-    ...presets.map((p) => {
-      const main = h(
-        'button',
-        { type: 'button', class: 'preset-main', 'aria-label': `${typeName(p.typeId)} ${placeLabel(p.placeCategoryId, p.placeId)} ${yen(p.amount)} を今日の記録として保存` },
-        h('span', { class: 'p-amount' }, yen(p.amount)),
-        h('span', { class: 'p-type' }, typeName(p.typeId)),
-        h('span', { class: 'p-place' }, placeLabel(p.placeCategoryId, p.placeId)),
-      );
-      attachPress(main, () => quickSave(p), () => loadIntoForm(p));
-      return h(
-        'div',
-        { class: 'preset' },
-        main,
-        h('button', { type: 'button', class: 'preset-edit', 'aria-label': '内容を修正して保存', title: '修正して保存', onclick: () => loadIntoForm(p) }, '✎'),
-      );
-    }),
-  );
-  $('quick-hint').hidden = presets.length === 0;
-  if (presets.length === 0) box.append(h('p', { class: 'empty' }, 'まだ記録がありません。下のフォームから最初の記録をどうぞ。'));
-
+  // 登録済み(非表示の種類・場所を含むものは出さない)+ 直近の記録 1 件
+  const presets = userPresets().filter(isPresetCombo);
   const last = lastCreated(state.entries);
-  const same = $('same-as-last');
-  const usable = last && isActiveCombo(last);
-  same.disabled = !usable;
-  same.textContent = usable ? `前回と同じ(${entrySummary(last)})` : '前回と同じ';
+  const latest = last && isActiveCombo(last) ? last : null;
+  const button = (p, { isLatest = false } = {}) => {
+    const title = isLatest ? typeName(p.typeId) : presetTitle(p);
+    const main = h(
+      'button',
+      { type: 'button', class: 'preset-main', 'aria-label': `${isLatest ? '直近の記録 ' : ''}${title} ${placeLabel(p.placeCategoryId, p.placeId)} ${yen(p.amount)} を今日の記録として保存` },
+      h('span', { class: 'p-amount' }, yen(p.amount)),
+      h('span', { class: 'p-type' }, isLatest ? h('span', { class: 'p-badge' }, '直近') : null, title),
+      h('span', { class: 'p-place' }, placeLabel(p.placeCategoryId, p.placeId)),
+    );
+    attachPress(main, () => (isLatest ? saveSameAsLast() : quickSave(p)), () => loadIntoForm(p));
+    return h(
+      'div',
+      { class: `preset${isLatest ? ' latest' : ''}` },
+      main,
+      h('button', { type: 'button', class: 'preset-edit', 'aria-label': '内容を修正して保存', title: '修正して保存', onclick: () => loadIntoForm(p) }, '✎'),
+    );
+  };
+  box.replaceChildren(...presets.map((p) => button(p)), latest ? button(latest, { isLatest: true }) : '');
+  const empty = presets.length === 0 && !latest;
+  $('quick-hint').hidden = empty;
+  if (empty) box.append(h('p', { class: 'empty' }, 'まだ記録がありません。下のフォームから最初の記録をどうぞ。'));
+}
+
+/** 今のフォームの内容(種類・場所・店・金額)をクイック入力に登録する */
+async function registerPresetFromForm() {
+  const amountStr = $('amount').value;
+  if (!form.typeId || !/^\d+$/.test(amountStr) || form.typeId === BEANS_TYPE_ID) return;
+  const cat = catById(form.placeCategoryId);
+  const preset = {
+    id: newId(),
+    typeId: form.typeId,
+    placeCategoryId: form.placeCategoryId || null,
+    placeId: cat?.hasStores ? form.placeId || null : null,
+    amount: Number(amountStr),
+    label: '',
+  };
+  const { list, error } = addUserPreset(userPresets(), preset);
+  if (error === 'duplicate') return showToast('同じ内容がすでにクイック入力に登録されています');
+  if (error === 'limit') return showToast(`クイック入力は${USER_PRESET_LIMIT}件までです。設定で削除してから登録してください`, null, 6000);
+  try {
+    await saveUserPresets(list);
+    renderPresets();
+    updateSaveState();
+    showToast('クイック入力に登録しました', null, 2500);
+  } catch (err) {
+    console.error(err);
+    showToast('登録できませんでした');
+  }
+}
+
+/** 1.8.x までの自動候補を、登録済みのクイック入力として一度だけ引き継ぐ */
+async function migrateQuickPresets() {
+  if (Array.isArray(state.settings.quickPresets)) return;
+  const legacy = quickPresets(state.entries, today(), LEGACY_PRESET_LIMIT, 90, isPresetCombo).map((p) => ({
+    id: newId(),
+    typeId: p.typeId,
+    placeCategoryId: p.placeCategoryId,
+    placeId: p.placeId,
+    amount: p.amount,
+    label: '',
+  }));
+  await saveUserPresets(legacy);
 }
 
 /** タップと長押しを区別する(長押し 500ms で onLong) */
@@ -790,6 +847,9 @@ function sanitizeGrams(input) {
 
 function updateSaveState() {
   $('save-btn').disabled = !readForm().valid;
+  // クイック入力に登録できるのは種類と金額があり、豆購入でないとき(豆購入は豆・予定杯数が毎回必要なため)
+  const reg = $('register-preset');
+  if (reg) reg.disabled = !form.typeId || form.typeId === BEANS_TYPE_ID || !/^\d+$/.test($('amount').value);
 }
 
 function resetForm() {
@@ -842,7 +902,14 @@ function loadIntoForm(p) {
   form.placeId = p.placeId;
   $('amount').value = String(p.amount);
   form.amountTouched = true;
+  // 直近の記録が豆購入なら豆と予定杯数も読み込む
+  if (p.beanId) form.beanId = p.beanId;
+  if (p.plannedCups) {
+    $('planned-cups').value = String(p.plannedCups);
+    form.plannedTouched = true;
+  }
   renderTypeChips();
+  renderBeanArea();
   renderCatChips();
   renderStoreArea();
   updateSaveState();
@@ -979,7 +1046,7 @@ function setupRecord() {
       applyGrams();
     });
   }
-  $('same-as-last').addEventListener('click', saveSameAsLast);
+  $('register-preset').addEventListener('click', registerPresetFromForm);
   $('edit-cancel').addEventListener('click', () => {
     const back = form.returnTo;
     resetForm();
@@ -1622,6 +1689,7 @@ function renderSettings() {
   ]);
   renderStores();
   renderMasterList('beans-list', state.beans, 'beans', () => []);
+  renderPresetSettings();
 }
 
 /** 種類・区分・店の 1 行(名前変更・並べ替え・非表示) */
@@ -1933,6 +2001,69 @@ function setupSettings() {
   onEnter('set-bean-name', addBeanMaster);
 }
 
+/** 設定: 登録済みのクイック入力(表示名の変更・並べ替え・削除) */
+function renderPresetSettings() {
+  const list = userPresets();
+  const box = $('presets-list');
+  if (list.length === 0) {
+    box.replaceChildren(h('li', { class: 'hint' }, 'まだ登録されていません。'));
+    return;
+  }
+  const move = async (i, d) => {
+    const next = [...list];
+    [next[i], next[i + d]] = [next[i + d], next[i]];
+    await saveUserPresets(next);
+    renderSettings();
+  };
+  box.replaceChildren(
+    ...list.map((p, i) =>
+      h(
+        'li',
+        { class: `master-row${isPresetCombo(p) ? '' : ' archived'}` },
+        h('input', {
+          type: 'text',
+          class: 'name-input',
+          value: p.label || '',
+          placeholder: typeName(p.typeId),
+          maxlength: '20',
+          'aria-label': '表示名',
+          onchange: async (ev) => {
+            const label = normalizeName(ev.target.value);
+            await saveUserPresets(list.map((x) => (x.id === p.id ? { ...x, label } : x)));
+            renderSettings();
+          },
+        }),
+        h(
+          'div',
+          { class: 'ctrls' },
+          h('span', { class: 'hint inline' }, `${placeLabel(p.placeCategoryId, p.placeId)}｜${yen(p.amount)}${isPresetCombo(p) ? '' : '(非表示の種類・場所を含むため記録画面には出ません)'}`),
+          h('button', { type: 'button', class: 'mini-btn', 'aria-label': '上へ', disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
+          h('button', { type: 'button', class: 'mini-btn', 'aria-label': '下へ', disabled: i === list.length - 1, onclick: () => move(i, 1) }, '↓'),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'mini-btn text',
+              onclick: async () => {
+                await saveUserPresets(list.filter((x) => x.id !== p.id));
+                renderSettings();
+                showToast('クイック入力から削除しました', {
+                  label: '元に戻す',
+                  run: async () => {
+                    await saveUserPresets(list);
+                    renderSettings();
+                  },
+                });
+              },
+            },
+            '削除',
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 renderers.settings = renderSettings;
 
 // ---------------------------------------------------------------- ヘルプ
@@ -2015,6 +2146,12 @@ async function start() {
     console.error(err);
     showToast('データベースを開けませんでした。ブラウザの設定を確認してください。', null, 10000);
     return;
+  }
+  try {
+    await migrateQuickPresets();
+    renderCurrent();
+  } catch (err) {
+    console.error(err);
   }
   // 1.8.1: 以前の「+1杯」で自宅になっていた杯の場所を、袋(豆購入)の場所に一度だけ直す
   if (!state.settings.bagCupPlaceFixed) {
