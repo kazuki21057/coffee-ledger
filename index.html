@@ -154,6 +154,11 @@
 
           <button type="submit" class="btn primary block" id="save-btn" disabled>保存</button>
           <button type="button" class="btn secondary block register-preset" id="register-preset" disabled>この内容をクイック入力に登録</button>
+          <div class="preset-replace" id="preset-replace" hidden>
+            <p class="hint">クイック入力は3件までです。入れ替える項目を選んでください。</p>
+            <div class="preset-replace-list" id="preset-replace-list"></div>
+            <button type="button" class="btn secondary small" id="preset-replace-cancel">キャンセル</button>
+          </div>
         </form>
       </section>
 
@@ -286,8 +291,23 @@
 
         <section class="card">
           <h2>クイック入力</h2>
-          <p class="hint">最大3件。記録画面で種類・場所・金額を入れて「この内容をクイック入力に登録」で追加します。表示名は空欄にすると自動の名前になります。</p>
+          <p class="hint">最大3件。ここで追加・編集するほか、記録画面の「この内容をクイック入力に登録」でも追加できます。表示名は空欄にすると種類名になります。</p>
           <ul class="master-list" id="presets-list"></ul>
+          <div class="qp-editor" id="qp-editor">
+            <h3 id="qp-editor-title">クイック入力を追加</h3>
+            <div class="filter-grid">
+              <label>種類<select id="qp-type"></select></label>
+              <label>場所<select id="qp-cat"></select></label>
+              <label id="qp-place-wrap" hidden>店<select id="qp-place"></select></label>
+              <label>金額(円)<input type="text" id="qp-amount" inputmode="numeric" pattern="[0-9]*" maxlength="7" autocomplete="off" placeholder="0" /></label>
+              <label>表示名(任意)<input type="text" id="qp-label" maxlength="20" autocomplete="off" /></label>
+            </div>
+            <div class="row">
+              <button type="button" class="btn small" id="qp-save">追加</button>
+              <button type="button" class="btn small secondary" id="qp-cancel" hidden>キャンセル</button>
+            </div>
+            <p class="error" id="qp-error" role="alert" hidden></p>
+          </div>
         </section>
 
         <section class="card">

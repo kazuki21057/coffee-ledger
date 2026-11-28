@@ -264,6 +264,20 @@ export function addUserPreset(list, preset, limit = USER_PRESET_LIMIT) {
   return { list: [...list, preset], error: null };
 }
 
+/**
+ * 登録済みのクイック入力の index 番目を preset に置き換える(入れ替え・編集)。
+ * 自分以外に同じ組み合わせがあれば置き換えずに 'duplicate' を返す。
+ * @returns {{list:object[], error:null|'duplicate'|'range'}}
+ */
+export function replaceUserPreset(list, index, preset) {
+  if (index < 0 || index >= list.length) return { list, error: 'range' };
+  const key = userPresetKey(preset);
+  if (list.some((p, i) => i !== index && userPresetKey(p) === key)) return { list, error: 'duplicate' };
+  const next = [...list];
+  next[index] = preset;
+  return { list: next, error: null };
+}
+
 /** 開封中の袋(予定杯数があり、使い切っていない豆購入)を新しい順に */
 export function openBags(entries) {
   return entries.filter((e) => isBeanPurchase(e) && !e.closedAt && e.plannedCups > 0).sort(compareRecency);

@@ -815,6 +815,37 @@ details > summary {
   vertical-align: 1px;
 }
 
+.preset-replace {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.preset-replace .hint {
+  margin-bottom: 6px;
+}
+
+.preset-replace-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.preset-replace-list .btn {
+  text-align: left;
+  font-weight: 400;
+}
+
+.qp-editor {
+  margin-top: 6px;
+}
+
+.qp-editor h3 {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+}
+
 .stat.wide {
   grid-column: 1 / -1;
 }

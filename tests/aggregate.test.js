@@ -26,6 +26,7 @@ import {
   cupsFromGrams,
   bagCupPlaceFixes,
   addUserPreset,
+  replaceUserPreset,
   USER_PRESET_LIMIT,
 } from '../js/aggregate.js';
 import { TYPES, PLACES, entry } from './fixtures.js';
@@ -488,5 +489,21 @@ describe('登録するクイック入力(1.9.0)', () => {
     const full = addUserPreset(r.list, p('can', 130));
     assert.equal(full.error, 'limit');
     assert.equal(full.list.length, 3);
+  });
+});
+
+describe('クイック入力の入れ替え・編集(1.9.1)', () => {
+  const p = (typeId, amount) => ({ id: `${typeId}${amount}`, typeId, amount, placeCategoryId: null, placeId: null });
+  const list = [p('drip', 120), p('latte', 180), p('can', 130)];
+  test('指定した位置を置き換え、並び順は保つ', () => {
+    const r = replaceUserPreset(list, 1, p('espresso', 200));
+    assert.equal(r.error, null);
+    assert.deepEqual(r.list.map((x) => x.typeId), ['drip', 'espresso', 'can']);
+    assert.deepEqual(list.map((x) => x.typeId), ['drip', 'latte', 'can']); // 元の配列は変えない
+  });
+  test('自分以外と同じ組み合わせなら置き換えない(自分自身と同じ内容への編集は可)', () => {
+    assert.equal(replaceUserPreset(list, 1, p('drip', 120)).error, 'duplicate');
+    assert.equal(replaceUserPreset(list, 0, { ...p('drip', 120), label: '朝' }).error, null);
+    assert.equal(replaceUserPreset(list, 5, p('x', 1)).error, 'range');
   });
 });

@@ -28,6 +28,7 @@ import {
   cupsFromGrams,
   bagCupPlaceFixes,
   addUserPreset,
+  replaceUserPreset,
   userPresetKey,
   USER_PRESET_LIMIT,
   filterEntries,
@@ -428,7 +429,8 @@ async function registerPresetFromForm() {
   };
   const { list, error } = addUserPreset(userPresets(), preset);
   if (error === 'duplicate') return showToast('同じ内容がすでにクイック入力に登録されています');
-  if (error === 'limit') return showToast(`クイック入力は${USER_PRESET_LIMIT}件までです。設定で削除してから登録してください`, null, 6000);
+  // 上限に達しているときは、入れ替える項目を選んでもらう(1.9.1)
+  if (error === 'limit') return openPresetReplace(preset);
   try {
     await saveUserPresets(list);
     renderPresets();
@@ -438,6 +440,52 @@ async function registerPresetFromForm() {
     console.error(err);
     showToast('登録できませんでした');
   }
+}
+
+/** 登録済みの 1 件を説明する文字列(表示名｜場所｜金額) */
+function presetSummary(p) {
+  return `${presetTitle(p)}｜${placeLabel(p.placeCategoryId, p.placeId)}｜${yen(p.amount)}`;
+}
+
+function openPresetReplace(preset) {
+  const list = userPresets();
+  $('preset-replace-list').replaceChildren(
+    ...list.map((old, i) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'btn secondary block',
+          onclick: async () => {
+            const { list: next, error } = replaceUserPreset(list, i, preset);
+            if (error) return showToast('入れ替えられませんでした');
+            try {
+              await saveUserPresets(next);
+              closePresetReplace();
+              renderPresets();
+              showToast(`「${presetSummary(old)}」と入れ替えました`, {
+                label: '元に戻す',
+                run: async () => {
+                  await saveUserPresets(list);
+                  renderPresets();
+                },
+              });
+            } catch (err) {
+              console.error(err);
+              showToast('登録できませんでした');
+            }
+          },
+        },
+        `${presetSummary(old)} と入れ替える`,
+      ),
+    ),
+  );
+  $('preset-replace').hidden = false;
+  $('preset-replace').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closePresetReplace() {
+  $('preset-replace').hidden = true;
 }
 
 /** 1.8.x までの自動候補を、登録済みのクイック入力として一度だけ引き継ぐ */
@@ -884,6 +932,7 @@ function resetForm() {
   $('rec-cat-error').hidden = true;
   $('rec-type-add').hidden = true;
   $('rec-type-error').hidden = true;
+  $('preset-replace').hidden = true;
   $('edit-banner').hidden = true;
   $('save-btn').textContent = '保存';
   setDate(today(), true);
@@ -1047,6 +1096,7 @@ function setupRecord() {
     });
   }
   $('register-preset').addEventListener('click', registerPresetFromForm);
+  $('preset-replace-cancel').addEventListener('click', closePresetReplace);
   $('edit-cancel').addEventListener('click', () => {
     const back = form.returnTo;
     resetForm();
@@ -2005,6 +2055,7 @@ function setupSettings() {
 function renderPresetSettings() {
   const list = userPresets();
   const box = $('presets-list');
+  renderPresetEditor();
   if (list.length === 0) {
     box.replaceChildren(h('li', { class: 'hint' }, 'まだ登録されていません。'));
     return;
@@ -2037,6 +2088,7 @@ function renderPresetSettings() {
           'div',
           { class: 'ctrls' },
           h('span', { class: 'hint inline' }, `${placeLabel(p.placeCategoryId, p.placeId)}｜${yen(p.amount)}${isPresetCombo(p) ? '' : '(非表示の種類・場所を含むため記録画面には出ません)'}`),
+          h('button', { type: 'button', class: 'mini-btn text', 'aria-label': `${presetSummary(p)}を編集`, onclick: () => openPresetEditor(p.id) }, '編集'),
           h('button', { type: 'button', class: 'mini-btn', 'aria-label': '上へ', disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
           h('button', { type: 'button', class: 'mini-btn', 'aria-label': '下へ', disabled: i === list.length - 1, onclick: () => move(i, 1) }, '↓'),
           h(
@@ -2062,6 +2114,121 @@ function renderPresetSettings() {
       ),
     ),
   );
+}
+
+// ---- 設定: クイック入力の追加・編集フォーム(1.9.1) ----
+
+const qp = { editingId: null, typeId: '', catId: '', placeId: '' };
+
+function presetFormOptions(items, selected, emptyLabel) {
+  return [
+    ...(emptyLabel ? [h('option', { value: '' }, emptyLabel)] : []),
+    ...items.map((x) => h('option', { value: x.id, selected: x.id === selected }, x.archived ? `${x.name}(非表示)` : x.name)),
+  ];
+}
+
+/** 編集フォームの選択肢を今の状態で作り直す(入力中の金額・表示名は残す) */
+function renderPresetEditor() {
+  const types = state.types.filter((t) => t.id !== BEANS_TYPE_ID && (!t.archived || t.id === qp.typeId));
+  if (!qp.typeId || !types.some((t) => t.id === qp.typeId)) qp.typeId = types[0]?.id || '';
+  $('qp-type').replaceChildren(...presetFormOptions(types, qp.typeId));
+  $('qp-type').value = qp.typeId;
+  const cats = state.placeCategories.filter((c) => !c.archived || c.id === qp.catId);
+  $('qp-cat').replaceChildren(...presetFormOptions(cats, qp.catId, '場所なし'));
+  $('qp-cat').value = qp.catId;
+  const cat = catById(qp.catId);
+  $('qp-place-wrap').hidden = !cat?.hasStores;
+  if (cat?.hasStores) {
+    const stores = state.places.filter((p) => p.categoryId === cat.id && (!p.archived || p.id === qp.placeId));
+    $('qp-place').replaceChildren(...presetFormOptions(stores, qp.placeId, '店を指定しない'));
+    $('qp-place').value = qp.placeId;
+  } else {
+    qp.placeId = '';
+  }
+  const editing = Boolean(qp.editingId);
+  $('qp-editor-title').textContent = editing ? 'クイック入力を編集' : 'クイック入力を追加';
+  $('qp-save').textContent = editing ? '変更を保存' : '追加';
+  $('qp-cancel').hidden = !editing;
+}
+
+function resetPresetEditor() {
+  Object.assign(qp, { editingId: null, typeId: '', catId: '', placeId: '' });
+  $('qp-amount').value = '';
+  $('qp-label').value = '';
+  $('qp-error').hidden = true;
+  renderPresetEditor();
+}
+
+function openPresetEditor(id) {
+  const p = userPresets().find((x) => x.id === id);
+  if (!p) return;
+  Object.assign(qp, { editingId: id, typeId: p.typeId, catId: p.placeCategoryId || '', placeId: p.placeId || '' });
+  $('qp-amount').value = String(p.amount);
+  $('qp-label').value = p.label || '';
+  $('qp-error').hidden = true;
+  renderPresetEditor();
+  $('qp-editor').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function savePresetFromEditor() {
+  const err = $('qp-error');
+  const fail = (msg) => {
+    err.textContent = msg;
+    err.hidden = false;
+  };
+  const amountStr = $('qp-amount').value;
+  if (!qp.typeId) return fail('種類を選んでください');
+  if (!/^\d+$/.test(amountStr)) return fail('金額は0以上の整数で入力してください');
+  const cat = catById(qp.catId);
+  const preset = {
+    id: qp.editingId || newId(),
+    typeId: qp.typeId,
+    placeCategoryId: qp.catId || null,
+    placeId: cat?.hasStores ? qp.placeId || null : null,
+    amount: Number(amountStr),
+    label: normalizeName($('qp-label').value),
+  };
+  const list = userPresets();
+  let result;
+  if (qp.editingId) {
+    result = replaceUserPreset(list, list.findIndex((x) => x.id === qp.editingId), preset);
+  } else {
+    result = addUserPreset(list, preset);
+  }
+  if (result.error === 'duplicate') return fail('同じ内容(種類・場所・店・金額)がすでに登録されています');
+  if (result.error === 'limit') return fail(`クイック入力は${USER_PRESET_LIMIT}件までです。不要な項目を削除するか、「編集」で中身を入れ替えてください`);
+  if (result.error) return fail('保存できませんでした');
+  try {
+    const wasEditing = Boolean(qp.editingId);
+    await saveUserPresets(result.list);
+    resetPresetEditor();
+    renderSettings();
+    showToast(wasEditing ? 'クイック入力を変更しました' : 'クイック入力に追加しました', null, 2500);
+  } catch (e) {
+    console.error(e);
+    fail('保存できませんでした');
+  }
+}
+
+function setupPresetEditor() {
+  $('qp-type').addEventListener('change', (ev) => {
+    qp.typeId = ev.target.value;
+  });
+  $('qp-cat').addEventListener('change', (ev) => {
+    qp.catId = ev.target.value;
+    qp.placeId = '';
+    renderPresetEditor();
+  });
+  $('qp-place').addEventListener('change', (ev) => {
+    qp.placeId = ev.target.value;
+  });
+  $('qp-amount').addEventListener('input', () => {
+    const input = $('qp-amount');
+    const cleaned = input.value.normalize('NFKC').replace(/[^\d]/g, '').slice(0, 7);
+    if (cleaned !== input.value) input.value = cleaned;
+  });
+  $('qp-save').addEventListener('click', savePresetFromEditor);
+  $('qp-cancel').addEventListener('click', resetPresetEditor);
 }
 
 renderers.settings = renderSettings;
@@ -2138,6 +2305,7 @@ async function start() {
   setupDashboard();
   setupHistory();
   setupSettings();
+  setupPresetEditor();
   setupServiceWorker();
   db.onChange(queueRefresh);
   try {

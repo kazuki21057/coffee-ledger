@@ -243,6 +243,23 @@ try {
   await p.click('#menu-btn');
   await p.click('#menu [data-view=settings]');
   check('設定にクイック入力の一覧', (await p.$$('#presets-list .master-row')).length >= 1);
+  // 設定画面から追加(上限まで)→ 4 件目は案内 → 編集で中身を変更
+  const qpAdd = async (typeLabel, amount) => {
+    await p.selectOption('#qp-type', { label: typeLabel });
+    await p.fill('#qp-amount', String(amount));
+    await p.click('#qp-save');
+    await p.waitForTimeout(150);
+  };
+  await qpAdd('ラテ', 380);
+  await qpAdd('缶コーヒー', 140);
+  const qpCount = (await p.$$('#presets-list .master-row')).length;
+  await qpAdd('缶ラテ', 150);
+  check('設定画面でクイック入力を追加(4件目は上限の案内)', qpCount === 3 && (await p.textContent('#qp-error')).includes('3件まで'), `${qpCount}件`);
+  await p.click('#presets-list .master-row >> nth=1 >> button:has-text("編集")');
+  await p.fill('#qp-amount', '400');
+  await p.click('#qp-save');
+  await p.waitForTimeout(150);
+  check('設定画面でクイック入力の中身を編集', (await p.textContent('#presets-list')).includes('¥400') && !(await p.textContent('#presets-list')).includes('¥380'));
   await p.click('#back-btn');
   check('横スクロールなし(幅360px)', !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth)));
   check('コンソールエラーなし', errors.length === 0, errors.slice(0, 5).join(' | '));
